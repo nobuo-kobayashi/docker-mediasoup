@@ -1,0 +1,12 @@
+version: '3.7'
+services:
+  gst-demo:
+    build:
+      context: ./gst-demo
+    hostname: gst-demo
+    container_name: gst-demo
+    tty: true
+    environment:
+      - MEDIASOUP_IP=mediasoup
+      - MEDIASOUP_PORT=3000
+      - MEDIASOUP_SSL=false

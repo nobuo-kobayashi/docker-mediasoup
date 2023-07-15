@@ -1,0 +1,19 @@
+version: '3.7'
+services:
+  mediasoup:
+    build:
+      context: ./mediasoup
+    hostname: mediasoup
+    container_name: mediasoup
+    ports:
+      - "3000:3000"
+      - "40000-40100:40000-40100"
+      - "40000-40100:40000-40100/udp"
+    environment:
+      - MEDIASOUP_IP=192.168.10.99
+      - MEDIASOUP_PORT=3000
+      - MEDIASOUP_SSL=false
+    volumes:
+      - ./certs:/opt/certs
+    tty: true
+

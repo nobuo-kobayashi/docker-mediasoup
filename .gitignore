@@ -1,0 +1,9 @@
+/**/build/
+/**/node_modules/
+.vscode
+
+# Local History for Visual Studio Code
+.history/
+
+/certs/server.key
+/certs/server.crt

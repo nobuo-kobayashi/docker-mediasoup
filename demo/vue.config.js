@@ -1,10 +1,15 @@
 const { defineConfig } = require('@vue/cli-service')
+const fs = require('fs')
 module.exports = defineConfig({
   transpileDependencies: true,
 
   devServer: {
     server: {
-      type: 'http'
+      type: 'https',
+      options: {
+        key: fs.readFileSync("../certs/server.key"),
+        cert: fs.readFileSync("../certs/server.crt"),
+      }
     }
   },
 
@@ -13,8 +18,6 @@ module.exports = defineConfig({
 			// https://github.com/vuetifyjs/vuetify-loader/tree/next/packages/vuetify-loader
 		}
   },
-
-  transpileDependencies: true,
 
   configureWebpack: {
     // watch: true,

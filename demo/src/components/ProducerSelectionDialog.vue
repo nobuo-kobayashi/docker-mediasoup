@@ -21,7 +21,7 @@
   </v-dialog>
 </template>
 
-<script>
+<script lang='ts'>
 import { defineComponent } from 'vue';
 
 export default defineComponent({
@@ -37,12 +37,12 @@ export default defineComponent({
   emits: [ 'onSelectProducerId' ],
 
   methods: {
-    open(items) {
+    open(items:[]) {
       this.dialogItems = items;
       this.dialog = true;
     },
 
-    onSelectProducerId(arg) {
+    onSelectProducerId(arg:any) {
       this.dialog = false;
       this.$emit('onSelectProducerId', arg.id);
     }

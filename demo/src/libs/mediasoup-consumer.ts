@@ -1,25 +1,22 @@
 import { Device } from "mediasoup-client";
 import { Transport } from "mediasoup-client/lib/Transport";
+import { MediasoupEventEmitter } from './mediasoup-events';
 
-export interface MediasoupConsumerListener {
-  onConsumerConnected(message:any) : void;
-  onConsumerConsume(message:any) : void;
+export const ConsumerEvent = {
+  KEY_CONSUMER_CONNECTED: 'consumer-connected',
+  KEY_CONSUMER_CONSUME: 'consumer-consume'
 }
 
-export class MediasoupConsumer {
-  private device: Device | undefined;
-  private rtpCapabilities: object;
-  private transport: Transport | undefined;
-  private listener: MediasoupConsumerListener | undefined;
-  private producerId: string | undefined;
+export class MediasoupConsumer extends MediasoupEventEmitter {
+  private device?:Device;
+  private rtpCapabilities:object;
+  private transport?:Transport;
+  private producerId?:string;
   private consumer:any;
 
   constructor(rtpCapabilities:object) {
+    super();
     this.rtpCapabilities = rtpCapabilities;
-  }
-
-  setListener(listener:MediasoupConsumerListener) : void {
-    this.listener = listener;
   }
 
   async create(recvTransport:any, producerId:string) : Promise<void> {
@@ -29,11 +26,16 @@ export class MediasoupConsumer {
 
     this.transport = await this.device.createRecvTransport(recvTransport);
     this.transport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+      if (!this.transport) {
+        errback(new Error('transport is not initialized.'));
+        return;
+      }
+
       try {
-        this.listener!.onConsumerConnected({
+        this.emit(ConsumerEvent.KEY_CONSUMER_CONNECTED, {
           'type': 'connect',
           'payload': {
-            'id': this.transport!.id, 
+            'id': this.transport.id, 
             'dtlsParameters': dtlsParameters
           }
         });
@@ -43,10 +45,10 @@ export class MediasoupConsumer {
       }
     });
 
-    this.listener!.onConsumerConsume({
+    this.emit(ConsumerEvent.KEY_CONSUMER_CONSUME, {
       'type': 'consume', 
       'payload': {
-        'id': this.transport!.id,
+        'id': this.transport.id,
         'producerId': this.producerId,
         'rtpCapabilities': this.device.rtpCapabilities
       }
@@ -54,13 +56,17 @@ export class MediasoupConsumer {
   }
 
   async consume(consumerOptions:any, remoteVideo:HTMLVideoElement) : Promise<void> {
-    this.consumer = await this.transport!.consume({
+    if (!this.transport) {
+      throw 'transport is not initialized.';
+    }
+
+    this.consumer = await this.transport.consume({
       'id': consumerOptions.id,
       'producerId': this.producerId,
       'kind': consumerOptions.kind,
       'rtpParameters': consumerOptions.rtpParameters
     });
-    remoteVideo.srcObject = new MediaStream([ this.consumer!.track ]);
+    remoteVideo.srcObject = new MediaStream([ this.consumer.track ]);
   }
 
   close() : void {

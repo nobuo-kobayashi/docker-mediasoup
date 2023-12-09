@@ -1,38 +1,39 @@
 import { Device } from "mediasoup-client";
 import { Transport } from "mediasoup-client/lib/Transport";
+import { MediasoupEventEmitter } from './mediasoup-events';
 
-export interface MediasoupDataProducerListener {
-  onDataProducerConnected(message: any) : void;
-  onDataProducerProduce(message: any) : void;
+export const DataProducerEvent = {
+  KEY_DATA_PRODUCER_CONNECTED: 'dataProducer-connected',
+  KEY_DATA_PRODUCER_PRODUCE: 'dataProducer-produce',
 }
 
-export class MediasoupDataProducer {
-  private device: Device | undefined;
-  private rtpCapabilities: object;
-  private transport: Transport | undefined;
-  private listener: MediasoupDataProducerListener | undefined;
-  private dataProducer: any;
+export class MediasoupDataProducer extends MediasoupEventEmitter {
+  private device?:Device;
+  private rtpCapabilities:object;
+  private transport?:Transport;
+  private dataProducer:any;
 
-  constructor(rtpCapabilities: object) {
+  constructor(rtpCapabilities:object) {
+    super();
     this.rtpCapabilities = rtpCapabilities;
   }
 
-  setListener(listener: MediasoupDataProducerListener) : void {
-    this.listener = listener;
-  }
-
-  async create(sendTransport: any) : Promise<void> {
+  async create(sendTransport:any) : Promise<void> {
     this.device = new Device();
     await this.device.load({ routerRtpCapabilities: this.rtpCapabilities });
 
     this.transport = await this.device.createSendTransport(sendTransport);
     this.transport.on('connect', async ({ dtlsParameters }, callback, errback) => {
+      if (!this.transport) {
+        errback(new Error('transport is not initialized.'));
+        return;
+      }
+
       try {
-        const id:string = this.transport!.id;
-        this.listener!.onDataProducerConnected({
+        this.emit(DataProducerEvent.KEY_DATA_PRODUCER_CONNECTED, {
           'type': 'connect', 
           'payload': {
-            'id': id,
+            'id': this.transport.id,
             'dtlsParameters': dtlsParameters
           }
         });
@@ -43,16 +44,20 @@ export class MediasoupDataProducer {
     });
 
     this.transport.on('producedata', async (parameters, callback, errback) => {
+      if (!this.transport) {
+        errback(new Error('transport is not initialized.'));
+        return;
+      }
+
       try {
-        const id:string = this.transport!.id;
-        this.listener!.onDataProducerProduce({
+        this.emit(DataProducerEvent.KEY_DATA_PRODUCER_PRODUCE, {
           'type': 'dataProduce',
           'payload': {
-            'id': id,
+            'id': this.transport.id,
             'parameters': parameters
           }
         });
-        callback({ id });
+        callback({ id: this.transport.id });
       } catch (e) {
         errback(new Error());
       }
@@ -60,8 +65,12 @@ export class MediasoupDataProducer {
   }
 
   async dataProduce() : Promise<void> {
+    if (!this.transport) {
+      throw 'transport is not initialized.';
+    }
+
     try {
-      this.dataProducer = await this.transport!.produceData();
+      this.dataProducer = await this.transport.produceData();
     } catch(e) {
       console.log('Failed to create produce.', e);
     }

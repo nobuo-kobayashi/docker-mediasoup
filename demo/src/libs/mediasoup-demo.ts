@@ -1,47 +1,58 @@
-import { WebsocketClient, WebsocketClientListener } from "./websocket-client";
-import { MediasoupProducer, MediasoupProducerListener } from "./mediasoup-producer";
-import { MediasoupConsumer, MediasoupConsumerListener } from "./mediasoup-consumer";
-import { MediasoupDataProducer, MediasoupDataProducerListener } from "./mediasoup-dataproducer";
-import { MediasoupDataConsumer, MediasoupDataConsumerListener } from "./mediasoup-dataconsumer";
+import { WebsocketClient, WSEvent } from "./websocket-client";
+import { MediasoupProducer, ProducerEvent } from "./mediasoup-producer";
+import { MediasoupConsumer, ConsumerEvent } from "./mediasoup-consumer";
+import { MediasoupDataProducer, DataProducerEvent } from "./mediasoup-dataproducer";
+import { MediasoupDataConsumer, DataConsumerEvent } from "./mediasoup-dataconsumer";
+import { MediasoupEventEmitter } from './mediasoup-events';
 
-export interface MediasoupDemoListener {
-  onWSOpen() : void;
-  onWSClose() : void;
-  onProducerId(producerId:string) : void;
-  onDataProducerId(dataProducerId:string) : void;
-  onDataChannelMessage(message:string) : void;
-  onProducerList(producerList:any) : void;
-  onDataProducerList(dataProducerList:any) : void;
+export const DemoEvent = {
+  KEY_WS_OPEN: 'ws-open',
+  KEY_WS_CLOSE: 'ws-close',
+  KEY_ON_PRODUCER_ID: 'producer-id',
+  KEY_ON_DATA_PRODUCER_ID: 'data-producer-id',
+  KEY_ON_MESSAGE: 'data-channel-message',
+  KEY_ON_PRODUCER_LIST: 'producer-list',
+  KEY_ON_DATA_PRODUCER_LIST: 'data-producer-list',
 }
 
-export class MediasoupDemo implements WebsocketClientListener, 
-          MediasoupProducerListener, MediasoupConsumerListener, 
-          MediasoupDataProducerListener, MediasoupDataConsumerListener {
-  private websocketClient: WebsocketClient | undefined;
-  private rtpCapabilities: object | undefined;
-  private producer: MediasoupProducer | undefined;
-  private consumer: MediasoupConsumer | undefined;
-  private dataProducer:MediasoupDataProducer | undefined;
-  private dataConsumer:MediasoupDataConsumer | undefined;
-  private listener: MediasoupDemoListener | undefined;
-  private stream: MediaStream | undefined;
-  private remoteVideo: HTMLVideoElement | undefined;
-  private producerId:string | undefined;
-  private dataProducerId:string | undefined;
+export class MediasoupDemo extends MediasoupEventEmitter {
+  private websocketClient?:WebsocketClient;
+  private rtpCapabilities?:object;
+  private producer?:MediasoupProducer;
+  private consumer?:MediasoupConsumer;
+  private dataProducer?:MediasoupDataProducer;
+  private dataConsumer?:MediasoupDataConsumer;
+  private stream?:MediaStream;
+  private remoteVideo?:HTMLVideoElement;
+  private producerId?:string;
+  private dataProducerId?:string;
 
   constructor(url:string) {
+    super();
     this.websocketClient = new WebsocketClient(url);
-    this.websocketClient.setListener(this);
+    this.websocketClient.on(WSEvent.KEY_WS_OPENED, this.onWSOpen.bind(this));
+    this.websocketClient.on(WSEvent.KEY_WS_CLOSED, this.onWSClose.bind(this));
+    this.websocketClient.on(WSEvent.KEY_WS_ERROR, this.onWSError.bind(this));
+    this.websocketClient.on(WSEvent.KEY_RTP_CAPABILITIES, this.onMediasoupRtpCapabilities.bind(this));
+    this.websocketClient.on(WSEvent.KEY_SEND_TRANSPORT, this.onMediasoupSendTransport.bind(this));
+    this.websocketClient.on(WSEvent.KEY_SECV_TRANSPORT, this.onMediasoupRecvTransport.bind(this));
+    this.websocketClient.on(WSEvent.KEY_PRODUCER, this.onMediasoupProducer.bind(this));
+    this.websocketClient.on(WSEvent.KEY_CONSUMER, this.onMediasoupConsumer.bind(this));
+    this.websocketClient.on(WSEvent.KEY_DATA_SEND_TRANSPORT, this.onMediasoupDataSendTransport.bind(this));
+    this.websocketClient.on(WSEvent.KEY_DATA_RECV_TRANSPORT, this.onMediasoupDataRecvTransport.bind(this));
+    this.websocketClient.on(WSEvent.KEY_DATA_PRODUCER, this.onMediasoupDataProducer.bind(this));
+    this.websocketClient.on(WSEvent.KEY_DATA_CONSUMER, this.onMediasoupDataConsumer.bind(this));
+    this.websocketClient.on(WSEvent.KEY_PRODUCER_LIST, this.onMediasoupProducerList.bind(this));
+    this.websocketClient.on(WSEvent.KEY_DATA_PRODUCER_LIST, this.onMediasoupDataProducerList.bind(this));
     this.websocketClient.connect();
   }
 
   // ===============================================================================
-  // WebsocketClientListener
+  // WebsocketClient Callbacks
   // ===============================================================================
 
   onWSOpen() : void {
-    console.log('onWSOpen');
-    this.listener?.onWSOpen();
+    this.emit(DemoEvent.KEY_WS_OPEN);
   }
 
   onWSError(event:Event) : void {
@@ -49,8 +60,7 @@ export class MediasoupDemo implements WebsocketClientListener,
   }
 
   onWSClose() : void {
-    console.log('onWSClose');
-    this.listener?.onWSClose();
+    this.emit(DemoEvent.KEY_WS_CLOSE);
   }
 
   onMediasoupRtpCapabilities(payload:any) : void {
@@ -66,7 +76,7 @@ export class MediasoupDemo implements WebsocketClientListener,
   }
 
   onMediasoupProducer(payload:any): void {
-    this.listener?.onProducerId(payload.producerId);
+    this.emit(DemoEvent.KEY_ON_PRODUCER_ID, payload.producerId);
   }
 
   onMediasoupConsumer(payload:any): void {
@@ -82,7 +92,7 @@ export class MediasoupDemo implements WebsocketClientListener,
   }
 
   onMediasoupDataProducer(payload:any) : void {
-    this.listener?.onDataProducerId(payload.dataProducerId);
+    this.emit(DemoEvent.KEY_ON_DATA_PRODUCER_ID, payload.dataProducerId);
   }
 
   onMediasoupDataConsumer(payload:any) : void {
@@ -90,15 +100,15 @@ export class MediasoupDemo implements WebsocketClientListener,
   }
 
   onMediasoupProducerList(payload:any) : void {
-    this.listener?.onProducerList(payload.producers);
+    this.emit(DemoEvent.KEY_ON_PRODUCER_LIST, payload.producers);
   }
 
   onMediasoupDataProducerList(payload:any) : void {
-    this.listener?.onDataProducerList(payload.dataProducers);
+    this.emit(DemoEvent.KEY_ON_DATA_PRODUCER_LIST, payload.dataProducers);
   }
 
   // ===============================================================================
-  // MediasoupProducerListener
+  // MediasoupProducer Callbacks
   // ===============================================================================
 
   onProducerConnected(message:any) : void {
@@ -112,7 +122,7 @@ export class MediasoupDemo implements WebsocketClientListener,
   }
 
   // ===============================================================================
-  // MediasoupConsumerListener
+  // MediasoupConsumer Callbacks
   // ===============================================================================
 
   onConsumerConnected(message:any) : void {
@@ -126,7 +136,7 @@ export class MediasoupDemo implements WebsocketClientListener,
   }
 
   // ===============================================================================
-  // MediasoupDataProducerListener
+  // MediasoupDataProducer Callbacks
   // ===============================================================================
 
   onDataProducerConnected(message:any) : void {
@@ -140,7 +150,7 @@ export class MediasoupDemo implements WebsocketClientListener,
   }
 
   // ===============================================================================
-  // MediasoupDataConsumerListener
+  // MediasoupDataConsumer Callbacks
   // ===============================================================================
 
   onDataConsumerConnected(message:any) : void {
@@ -155,16 +165,12 @@ export class MediasoupDemo implements WebsocketClientListener,
 
   onDataConsumerMessage(message:string) : void {
     console.log('onDataConsumerMessage ', message);
-    this.listener?.onDataChannelMessage(message);
+    this.emit(DemoEvent.KEY_ON_MESSAGE, message);
   }
 
   // ===============================================================================
   // public
   // ===============================================================================
-
-  setListener(listener:MediasoupDemoListener) : void {
-    this.listener = listener;
-  }
 
   isWSConnected() {
     return this.websocketClient?.isConnected();
@@ -225,16 +231,27 @@ export class MediasoupDemo implements WebsocketClientListener,
   }
 
   private async createProducer(sendTransport:any, stream: MediaStream) : Promise<void> {
-    this.producer = new MediasoupProducer(this.rtpCapabilities!);
-    this.producer.setListener(this);
+    if (!this.rtpCapabilities) {
+      throw 'rtpCapabilities is not initialized.';
+    }
+    this.producer = new MediasoupProducer(this.rtpCapabilities);
+    this.producer.on(ProducerEvent.KEY_PRODUCER_CONNECT, this.onProducerConnected.bind(this));
+    this.producer.on(ProducerEvent.KEY_PRODUCER_PRODUCE, this.onProducerProduce.bind(this));
     await this.producer.create(sendTransport);
     await this.producer.produce(stream);
   }
 
-  private async createConsumer(recvTransport:any, video: HTMLVideoElement) : Promise<void> {
-    this.consumer = new MediasoupConsumer(this.rtpCapabilities!);
-    this.consumer.setListener(this);
-    await this.consumer.create(recvTransport, this.producerId!);
+  private async createConsumer(recvTransport:any, video:HTMLVideoElement) : Promise<void> {
+    if (!this.rtpCapabilities) {
+      throw 'rtpCapabilities is not initialized.';
+    }
+    if (!this.producerId) {
+      throw 'producerId is not initialized.';
+    }
+    this.consumer = new MediasoupConsumer(this.rtpCapabilities);
+    this.consumer.on(ConsumerEvent.KEY_CONSUMER_CONNECTED, this.onConsumerConnected.bind(this));
+    this.consumer.on(ConsumerEvent.KEY_CONSUMER_CONSUME, this.onConsumerConsume.bind(this));
+    await this.consumer.create(recvTransport, this.producerId);
   }
 
   requestCreateDataProducer() : void {
@@ -258,16 +275,28 @@ export class MediasoupDemo implements WebsocketClientListener,
   }
 
   private async createDataProducer(sendTransport:any) : Promise<void> {
-    this.dataProducer = new MediasoupDataProducer(this.rtpCapabilities!);
-    this.dataProducer.setListener(this);
+    if (!this.rtpCapabilities) {
+      throw 'rtpCapabilities is not initialized.';
+    }
+    this.dataProducer = new MediasoupDataProducer(this.rtpCapabilities);
+    this.dataProducer.on(DataProducerEvent.KEY_DATA_PRODUCER_CONNECTED, this.onDataProducerConnected.bind(this));
+    this.dataProducer.on(DataProducerEvent.KEY_DATA_PRODUCER_PRODUCE, this.onDataProducerProduce.bind(this));
     await this.dataProducer.create(sendTransport);
     await this.dataProducer.dataProduce();
   }
 
   private async createDataConsumer(recvTransport:any) : Promise<void> {
-    this.dataConsumer = new MediasoupDataConsumer(this.rtpCapabilities!);
-    this.dataConsumer.setListener(this);
-    await this.dataConsumer.create(recvTransport, this.dataProducerId!);
+    if (!this.rtpCapabilities) {
+      throw 'rtpCapabilities is not initialized.';
+    }
+    if (!this.dataProducerId) {
+      throw 'dataProducerId is not initialized.';
+    }
+    this.dataConsumer = new MediasoupDataConsumer(this.rtpCapabilities);
+    this.dataConsumer.on(DataConsumerEvent.KEY_DATA_CONSUMER_CONNECTED, this.onDataConsumerConnected.bind(this));
+    this.dataConsumer.on(DataConsumerEvent.KEY_DATA_CONSUMER_CONSUME, this.onConsumerConsume.bind(this));
+    this.dataConsumer.on(DataConsumerEvent.KEY_DATA_CONSUMER_MESSAGE, this.onDataConsumerMessage.bind(this));
+    await this.dataConsumer.create(recvTransport, this.dataProducerId);
   }
 
   async sendMessage(message:string) : Promise<void> {

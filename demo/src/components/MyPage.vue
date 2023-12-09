@@ -1,7 +1,7 @@
 <template>
   <v-container>
     <v-row>
-      <v-col align="center" cols="12">
+      <v-col justify="center" cols="12">
         映像・音声
       </v-col>
     </v-row>
@@ -29,31 +29,31 @@
       </v-col>
     </v-row>
     <v-row>
-      <v-col align="center" cols="3">
+      <v-col justify="center" cols="3">
         <v-btn @click="onPauseButton" block>
           Pause
         </v-btn>
       </v-col>
-      <v-col align="center" cols="3">
+      <v-col justify="center" cols="3">
         <v-btn @click="onResumeButton" block>
           Resume
         </v-btn>
       </v-col>
-      <v-col align="center" cols="6">
+      <v-col justify="center" cols="6">
       </v-col>
     </v-row>
-    <v-row align="center">
-      <v-col align="center" cols="6">
+    <v-row justify="center">
+      <v-col justify="center" cols="6">
         <canvas id="canvas"></canvas>
       </v-col>
-      <v-col align="center" cols="6">
+      <v-col justify="center" cols="6">
         <video id="video" autoplay playsinline controls muted>
           Your browser does not support video
         </video> 
       </v-col>
     </v-row>
-    <v-row align="center">
-      <v-col align="center" cols="12">
+    <v-row justify="center">
+      <v-col justify="center" cols="12">
         データチャンネル
       </v-col>
     </v-row>
@@ -117,49 +117,8 @@ div.text {
 
 <script lang='ts'>
 import { defineComponent } from 'vue'
-import { MediasoupDemo, MediasoupDemoListener } from '@/libs/mediasoup-demo'
+import { MediasoupDemo, DemoEvent } from '@/libs/mediasoup-demo'
 import ProducerSelectionDialog from '@/components/ProducerSelectionDialog.vue'
-
-class DemoListener implements MediasoupDemoListener {
-  private vueObj:any;
-
-  constructor(obj:any) {
-    this.vueObj = obj;
-  }
-
-  onWSOpen() : void {
-    this.vueObj.mediasoup.requestRtpCapabilities();
-    console.log('ws opened');
-  }
-
-  onWSClose() : void {
-    console.log('ws closed');
-  }
-
-  onProducerId(producerId:string) : void {
-    this.vueObj.producerId = producerId;
-  }
-
-  onDataProducerId(dataProducerId:string) : void {
-    this.vueObj.dataProducerId = dataProducerId;
-  }
-
-  onDataChannelMessage(message:string) : void {
-    this.vueObj.recvText += message;
-    this.vueObj.recvText += '<br>';
-  }
-
-  onProducerList(producerList:any) : void {
-    console.log('onProducerList', producerList);
-    this.vueObj.producerDialogItems = producerList;
-    this.vueObj.$refs.producerDialog.open(producerList);
-  }
-
-  onDataProducerList(dataProducerList:any) : void {
-    console.log('onDataProducerList', dataProducerList);
-    this.vueObj.$refs.dataProducerDialog.open(dataProducerList);
-  }
-}
 
 export default defineComponent({
   name: 'MyPage',
@@ -171,11 +130,10 @@ export default defineComponent({
   data() {
     return {
       producerDialogItems: [],
-      producerId: undefined,
-      dataProducerId: undefined,
-      sendText: undefined,
-      recvText: '',
-      vad: undefined
+      producerId: '' as string,
+      dataProducerId: '' as string,
+      sendText: '',
+      recvText: ''
     }
   },
 
@@ -193,10 +151,49 @@ export default defineComponent({
   },
 
   mounted() {
-    this.mediasoup.setListener(new DemoListener(this));
+    this.mediasoup.on(DemoEvent.KEY_WS_OPEN, this.onWSOpen.bind(this));
+    this.mediasoup.on(DemoEvent.KEY_WS_CLOSE, this.onWSClose.bind(this));
+    this.mediasoup.on(DemoEvent.KEY_ON_PRODUCER_ID, this.onProducerId.bind(this));
+    this.mediasoup.on(DemoEvent.KEY_ON_DATA_PRODUCER_ID, this.onDataProducerId.bind(this));
+    this.mediasoup.on(DemoEvent.KEY_ON_MESSAGE, this.onDataChannelMessage.bind(this));
+    this.mediasoup.on(DemoEvent.KEY_ON_PRODUCER_LIST, this.onProducerList.bind(this));
+    this.mediasoup.on(DemoEvent.KEY_ON_DATA_PRODUCER_LIST, this.onDataProducerList.bind(this));
   },
 
   methods: {
+    onWSOpen() : void {
+      this.mediasoup.requestRtpCapabilities();
+      console.log('ws opened');
+    },
+
+    onWSClose() : void {
+      console.log('ws closed');
+    },
+
+    onProducerId(producerId:string) : void {
+      this.producerId = producerId;
+    },
+
+    onDataProducerId(dataProducerId:string) : void {
+      this.dataProducerId = dataProducerId;
+    },
+
+    onDataChannelMessage(message:string) : void {
+      this.recvText += message;
+      this.recvText += '<br>';
+    },
+
+    onProducerList(producerList:any) : void {
+      console.log('onProducerList', producerList);
+      this.producerDialogItems = producerList;
+      (this.$refs.producerDialog as any).open(producerList);
+    },
+
+    onDataProducerList(dataProducerList:any) : void {
+      console.log('onDataProducerList', dataProducerList);
+      (this.$refs.dataProducerDialog as any).open(dataProducerList);
+    },
+
     onUpdateProducerList() : void {
       this.mediasoup.requestGetProducerList();
     },
@@ -205,11 +202,11 @@ export default defineComponent({
       this.mediasoup.requestGetDataProducerList();
     },
 
-    async onSelectProducerId(response:any) : Promise<void> {
+    async onSelectProducerId(response:string) : Promise<void> {
       this.producerId = response;
     },
 
-    async onSelectDataProducerId(response:any) : Promise<void> {
+    async onSelectDataProducerId(response:string) : Promise<void> {
       this.dataProducerId = response;
     },
 
@@ -220,8 +217,8 @@ export default defineComponent({
       }
       // カメラの映像を配信する場合は、こちらを使用します。
       // カメラやディスプレイの取得は https か localhost 以外では使用できないので注意。
-      // this.mediasoup.setMediaStream(await this.getCameraStream());
-      this.mediasoup.setMediaStream(this.getCanvasStream());
+      this.mediasoup.setMediaStream(await this.getCameraStream());
+      // this.mediasoup.setMediaStream(this.getCanvasStream());
       this.mediasoup.requestCreateProducer();
     },
 
@@ -231,7 +228,7 @@ export default defineComponent({
         return;
       }
       if (!this.producerId) {
-        console.warn('this.pproducerId is not set.');
+        console.warn('this.producerId is not set.');
         return;
       }
       this.mediasoup.setProducerId(this.producerId);
@@ -265,12 +262,15 @@ export default defineComponent({
         console.warn('websocket is not connected.');
         return;
       }
-      this.mediasoup.sendMessage(this.sendText!);
+      if (!this.sendText) {
+        return;
+      }
+      this.mediasoup.sendMessage(this.sendText);
     },
 
     async getCameraStream() : Promise<MediaStream> {
-      let cameraStream = await navigator.mediaDevices.getDisplayMedia({video: true, audio: false});
-      // let cameraStream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
+      // let cameraStream = await navigator.mediaDevices.getDisplayMedia({video: true, audio: false});
+      let cameraStream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
       return cameraStream;
     },
 

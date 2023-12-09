@@ -1,3 +1,5 @@
+import { EventEmitter } from 'events';
+
 /**
  * Websocket が接続されているステートを定義します。
  * 
@@ -5,38 +7,38 @@
  */
 const WS_OPEN_STATE = 1;
 
-export interface WebsocketClientListener {
-  onWSOpen() : void;
-  onWSError(event:Event) : void;
-  onWSClose() : void;
-  onMediasoupRtpCapabilities(payload:any) : void;
-  onMediasoupSendTransport(payload:any) : void;
-  onMediasoupRecvTransport(payload:any) : void;
-  onMediasoupProducer(payload:any) : void;
-  onMediasoupConsumer(payload:any) : void;
-  onMediasoupDataSendTransport(payload:any) : void;
-  onMediasoupDataRecvTransport(payload:any) : void;
-  onMediasoupDataProducer(payload:any) : void;
-  onMediasoupDataConsumer(payload:any) : void;
-  onMediasoupProducerList(payload:any) : void;
-  onMediasoupDataProducerList(payload:any) : void;
+export const WSEvent = {
+  KEY_WS_OPENED: 'wsopened',
+  KEY_WS_CLOSED: 'wsclosed',
+  KEY_WS_ERROR: 'wserror',
+  KEY_RTP_CAPABILITIES: 'rtpCapabilities',
+  KEY_SEND_TRANSPORT: 'sendTransport',
+  KEY_SECV_TRANSPORT: 'recvTransport',
+  KEY_PRODUCER: 'producer',
+  KEY_CONSUMER: 'consumer',
+  KEY_DATA_SEND_TRANSPORT: 'dataSendTransport',
+  KEY_DATA_RECV_TRANSPORT: 'dataRecvTransport',
+  KEY_DATA_PRODUCER: 'dataProducer',
+  KEY_DATA_CONSUMER: 'dataConsumer',
+  KEY_PRODUCER_LIST: 'producerList',
+  KEY_DATA_PRODUCER_LIST: 'dataProducerList'
 }
 
 export class WebsocketClient {
-  private ws:WebSocket | undefined;
+  private ws?:WebSocket;
   private url:string;
   private closeFlag:boolean;
-  private listener:WebsocketClientListener | undefined;;
+  private emitter:EventEmitter;
 
   constructor (url:string) {
     this.url = url;
     this.ws = undefined;
     this.closeFlag = false;
-    this.listener = undefined;
+    this.emitter = new EventEmitter();
   }
 
-  setListener(listener:WebsocketClientListener) : void {
-    this.listener = listener;
+  on(key:string, callback:any) {
+    this.emitter.on(key, callback);
   }
 
   connect() {
@@ -47,7 +49,7 @@ export class WebsocketClient {
         this.close();
         return;
       }
-      this.listener?.onWSOpen();
+      this.emitter.emit(WSEvent.KEY_WS_OPENED);
     };
 
     this.ws.onmessage = (event:MessageEvent) => {
@@ -61,51 +63,19 @@ export class WebsocketClient {
 
       console.log('@@ this.ws.onmessage', json);
 
-      switch (json.type) { 
-        case 'rtpCapabilities':
-          this.listener?.onMediasoupRtpCapabilities(json.payload);
-          break;
-        case 'sendTransport':
-          this.listener?.onMediasoupSendTransport(json.payload);
-          break;
-        case 'recvTransport':
-          this.listener?.onMediasoupRecvTransport(json.payload);
-          break;
-        case 'producer':
-          this.listener?.onMediasoupProducer(json.payload);
-          break;
-        case 'consumer':
-          this.listener?.onMediasoupConsumer(json.payload);
-          break;
-        case 'dataSendTransport':
-          this.listener?.onMediasoupDataSendTransport(json.payload);
-          break;
-        case 'dataRecvTransport':
-          this.listener?.onMediasoupDataRecvTransport(json.payload);
-          break;
-        case 'dataProducer':
-          this.listener?.onMediasoupDataProducer(json.payload);
-          break;
-        case 'dataConsumer':
-          this.listener?.onMediasoupDataConsumer(json.payload);
-          break;
-        case 'producerList':
-          this.listener?.onMediasoupProducerList(json.payload);
-          break;
-        case 'dataProducerList':
-          this.listener?.onMediasoupDataProducerList(json.payload);
-          break;
-        default:
-          break;
+      const type = json.type;
+      const payload = json.payload;
+      if (type && payload) {
+        this.emitter.emit(type, payload);
       }
     };
 
     this.ws.onerror = (event:Event) => {
-      this.listener?.onWSError(event);
+      this.emitter.emit(WSEvent.KEY_WS_ERROR, event);
     };
 
     this.ws.onclose = () => {
-      this.listener?.onWSClose();
+      this.emitter.emit(WSEvent.KEY_WS_CLOSED);
       this.ws = undefined;
     };
 
@@ -125,7 +95,6 @@ export class WebsocketClient {
   }
 
   close(code = undefined) {
-    this.listener = undefined;
     this.closeFlag = true;
 
     // websocket に接続される前に close が要求された場合には

@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@mdi/font": "5.9.55",
+    "EventEmitter": "^1.0.0",
     "core-js": "^3.8.3",
     "mediasoup-client": "^3.6.82",
     "roboto-fontface": "*",

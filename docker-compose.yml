@@ -10,10 +10,26 @@ services:
       - "40000-40100:40000-40100"
       - "40000-40100:40000-40100/udp"
     environment:
-      - MEDIASOUP_IP=192.168.10.99
+      - TZ=Asia/Tokyo
+      - MEDIASOUP_IP=192.168.2.25
       - MEDIASOUP_PORT=3000
-      - MEDIASOUP_SSL=false
+      - MEDIASOUP_SSL=true
     volumes:
       - ./certs:/opt/certs
     tty: true
-
+  media-server:
+    build:
+      context: ./media-server
+    hostname: media-server
+    container_name: media-server
+    ports:
+      - "1935:1935"
+    environment:
+      - TZ=Asia/Tokyo
+    tty: true
+    volumes:
+      - ./media-server/config:/opt/config
+    command: >
+      /opt/simple-media-server/build/simple-media-server -c /opt/config/media-server.config
+    depends_on:
+      - mediasoup

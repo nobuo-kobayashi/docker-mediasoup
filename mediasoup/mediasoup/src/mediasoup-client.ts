@@ -1,9 +1,9 @@
-import { WebsocketClient, WebsocketClientLister } from "./websocket-client";
+import { WebsocketClient, WSClientEvent } from "./websocket-client";
 import { MediasoupManager } from "./mediasoup-manager";
 
 const MEDIASOUP_ID = 'mediasoup001';
 
-export class MediasoupClient implements WebsocketClientLister {
+export class MediasoupClient {
   private manager:MediasoupManager;
   private client:WebsocketClient;
   private transports:Array<any>;
@@ -11,7 +11,8 @@ export class MediasoupClient implements WebsocketClientLister {
   constructor(manager:MediasoupManager, client:WebsocketClient) {
     this.manager = manager;
     this.client = client;
-    this.client.setListener(this);
+    this.client.on(WSClientEvent.KEY_ON_CLOSE, this.onClose.bind(this));
+    this.client.on(WSClientEvent.KEY_ON_MESSAGE, this.onMessage.bind(this));
     this.transports = new Array();
   }
 

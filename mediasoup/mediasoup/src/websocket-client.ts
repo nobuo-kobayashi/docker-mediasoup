@@ -1,19 +1,20 @@
 import { WebsocketServer } from "./websocket-server";
+import { EventEmitter } from 'events';
 
-export interface WebsocketClientLister {
-  onClose() : void;
-  onMessage(message: string) : void;
+export const WSClientEvent = {
+  KEY_ON_CLOSE: 'ws-client-close',
+  KEY_ON_MESSAGE: 'ws-client-message'
 }
 
 export class WebsocketClient {
-  private id: string;
-  private ws: any;
-  private server: WebsocketServer;
-  private listener: WebsocketClientLister | undefined;
+  private id:string;
+  private ws:any;
+  private server:WebsocketServer;
+  private emitter:EventEmitter;
 
   constructor(server:WebsocketServer, id:string, ws:any) {
     this.server = server;
-    this.listener = undefined;
+    this.emitter = new EventEmitter();
     this.id = id;
     this.ws = ws;
     this.ws.isAlive = true;
@@ -22,7 +23,7 @@ export class WebsocketClient {
       this.ws.isAlive = true;
     });
     this.ws.on('close', () => {
-      this.listener?.onClose();
+      this.emitter.emit(WSClientEvent.KEY_ON_CLOSE);
       this.server.onDisconnect(this);
     });
   }
@@ -31,8 +32,8 @@ export class WebsocketClient {
     return this.id;
   }
 
-  setListener(listener:WebsocketClientLister) : void {
-    this.listener = listener;
+  on(key:string, callback:any) : void {
+    this.emitter.on(key, callback);
   }
 
   close(code:number, reason:string) : void {
@@ -53,7 +54,7 @@ export class WebsocketClient {
 
   onMessageInternal(message:string) : void {
     try {
-      this.listener?.onMessage(message);
+      this.emitter.emit(WSClientEvent.KEY_ON_MESSAGE, message);
     } catch (e) {
       console.error('An error occurred on onMessage. id=' + this.id, e);
     }

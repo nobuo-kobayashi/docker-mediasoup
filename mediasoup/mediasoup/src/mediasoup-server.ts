@@ -1,16 +1,17 @@
-import { WebsocketServer, WebsocketServerListener } from "./websocket-server";
+import { WebsocketServer, WSEvent } from "./websocket-server";
 import { WebsocketClient } from "./websocket-client";
 import { MediasoupClient } from "./mediasoup-client";
 import { MediasoupManager } from "./mediasoup-manager";
 
-export class MediasoupServer implements WebsocketServerListener {
-  private websocketServer: WebsocketServer;
-  private websocketClients: Map<string, MediasoupClient>;
-  private manager: MediasoupManager
+export class MediasoupServer {
+  private websocketServer:WebsocketServer;
+  private websocketClients:Map<string, MediasoupClient>;
+  private manager:MediasoupManager
 
   constructor(app:any, server:any, serverOptions:any) {
     this.websocketServer = new WebsocketServer(app, server, serverOptions);
-    this.websocketServer.setListener(this);
+    this.websocketServer.on(WSEvent.KEY_WS_CONNECTED, this.onConnected.bind(this));
+    this.websocketServer.on(WSEvent.KEY_WS_DISCONNECTED, this.onDisconnected.bind(this));
     this.websocketClients = new Map();
     this.manager = new MediasoupManager();
   }

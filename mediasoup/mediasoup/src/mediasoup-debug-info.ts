@@ -30,6 +30,14 @@ export class MediasoupDebugInfo {
             producer.observer.on('close', () => {
               console.log(`producer closed [producer.id:${producer.id}]`);
             });
+            // producer.enableTraceEvent([ "rtp" ]);
+            // producer.on('trace', (trace:any) => {
+            //   if (trace.info.rtpPacket.isKeyFrame) {
+            //     console.log('@@@ producer', trace);
+            //   } else {
+            //     console.log(`@@@ producer sequenceNumber=${trace.info.rtpPacket.sequenceNumber} payloadType=${trace.info.rtpPacket.payloadType} payloadSize=${trace.info.rtpPacket.payloadSize} timestamp=${trace.info.rtpPacket.timestamp}`);
+            //   }
+            // });
           });
 
           transport.observer.on('newconsumer', (consumer:any) => {
@@ -39,7 +47,7 @@ export class MediasoupDebugInfo {
             });
             // consumer.enableTraceEvent([ "rtp" ]);
             // consumer.on('trace', (trace:any) => {
-            //   console.log('@@@ trace', trace);
+            //   console.log('@@@ consumer', trace);
             // });
           });
 

@@ -1,29 +1,30 @@
 import express from 'express';
 import expressWs from 'express-ws';
 import { WebsocketClient } from './websocket-client';
+import { EventEmitter } from 'events';
 
-export interface WebsocketServerListener {
-  onConnected(client: WebsocketClient) : void;
-  onDisconnected(client: WebsocketClient) : void;
+export const WSEvent = {
+  KEY_WS_CONNECTED: 'ws-connected',
+  KEY_WS_DISCONNECTED: 'ws-disconnected'
 }
 
 export class WebsocketServer {
-  private wss: any;
-  private clients: Map<string, WebsocketClient>;
-  private listener: WebsocketServerListener | undefined;
-  private keepAliveInterval: any;
-  private count: number;
+  private wss:any;
+  private clients:Map<string, WebsocketClient>;
+  private keepAliveInterval:any;
+  private count:number;
+  private emitter:EventEmitter;
 
   constructor(expressApp:express.Express, server:any, options:any) {
     this.clients = new Map();
-    this.listener = undefined;
+    this.emitter = new EventEmitter();
     this.wss = expressWs(expressApp, server, options);
     this.wss.app.ws('/', this.onConnect.bind(this));
     this.count = 0;
   }
 
-  setListener(listener:WebsocketServerListener) : void {
-    this.listener = listener;
+  on(key:string, callback:any) : void {
+    this.emitter.on(key, callback);
   }
 
   shutdown() {
@@ -88,7 +89,7 @@ export class WebsocketServer {
     const client:WebsocketClient = new WebsocketClient(this, clientId, ws);
     this.clients.set(clientId, client);
     try {
-      this.listener?.onConnected(client);
+      this.emitter.emit(WSEvent.KEY_WS_CONNECTED, client);
     } catch (e) {
       console.error('An error has occurred on onConnected.', e);
     }
@@ -102,7 +103,7 @@ export class WebsocketServer {
       console.error('Failed to delete a client. clientId=' + clientId, e);
     } finally {
       try {
-        this.listener?.onDisconnected(client);
+        this.emitter.emit(WSEvent.KEY_WS_DISCONNECTED, client);
       } catch (e) {
         console.error('An error has occurred on onDisconnected.', e);
       }

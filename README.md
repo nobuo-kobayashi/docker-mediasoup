@@ -8,33 +8,21 @@ mediasoup の詳細については、本家のページでご確認ください�
 
 ## SDP に格納される IP アドレス
 
-`docker-compose.yml` に mediasoup で使用する announcedIp を指定しています。
+`mediasoup/config/mediasoup-config.json` の announcedIp に、使用するグローバル IP を指定してください。
 
 announcedIp は、SDP に格納される IP アドレスになります。<br>
-外部からアクセスされる場合には、ここを使用するグローバル IP に指定してください。
 
-```yml
-    environment:
-      - MEDIASOUP_IP=192.168.xxx.xxx
-```
-
-`mediasoup/mediasoup/src/mediasoup.ts` の announcedIp は、以下のように設定されています。
-
-```ts
-// 環境変数から announcedIp を取得します。
-// docker-compose.yml で定義しています。
-const announcedIp = process.env.MEDIASOUP_IP;
+```json
+  "webRtcTransportOptions": {
+    "listenIps": [
+      { "ip": "127.0.0.1" },
+      { "ip": "0.0.0.0", "announcedIp": "192.168.2.30" }
+    ],
         :
+       省略
         :
-  async createWebRtcTransport() : Promise<any> {
-    const transport = await this.router.createWebRtcTransport({
-      listenIps: [
-        { ip: '127.0.0.1' },
-        { ip: '0.0.0.0', announcedIp: announcedIp }
-      ],
-    }
-        :
-        :
+  "plainTransportOptions": {
+    "listenIp": { "ip": "0.0.0.0", "announcedIp": "192.168.2.30" }
   }
 ```
 
@@ -49,18 +37,14 @@ const announcedIp = process.env.MEDIASOUP_IP;
       - "40000-40100:40000-40100/udp"
 ```
 
-`mediasoup/mediasoup/src/mediasoup.ts` にも同じように mediasoup で使用するポート番号を指定しています。
+`mediasoup/config/mediasoup-config.json` にも同じように mediasoup で使用するポート番号を指定しています。
 
 ```ts
-  async init() : Promise<void> {
-    // rtcMinPort と rtcMaxPort は、docker-compose.yml で定義している ports の値と合わせる必要があります。
-    const workerOptions = {
-      rtcMinPort: 40000,  // WebRTC で使用するポート番号の下限値
-      rtcMaxPort: 40100,  // WebRTC で使用するポート番号の上限値
-          :
-          :
-    }
-  }
+  "workerOptions": {
+    "rtcMinPort": 40000,
+    "rtcMaxPort": 40100,
+        :
+       省略
 ```
 
 ここに指定したポート番号を使用して、mediasoup に接続しますので、変更する場合には、2つのファイルを同じく値になる様に変更してください。
@@ -98,7 +82,6 @@ $ docker compose up
 
 ```yaml
     environment:
-      - MEDIASOUP_IP=192.168.10.99
       - MEDIASOUP_PORT=3000
       - MEDIASOUP_SSL=true
 ```

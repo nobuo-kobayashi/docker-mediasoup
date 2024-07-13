@@ -2,6 +2,10 @@ import express from 'express';
 import expressWs from 'express-ws';
 import { WebsocketClient } from './websocket-client';
 import { EventEmitter } from 'events';
+import { getLogger } from 'log4js';
+
+const logger = getLogger();
+const accessLogger = getLogger('access');
 
 export const WSEvent = {
   KEY_WS_CONNECTED: 'ws-connected',
@@ -37,9 +41,9 @@ export class WebsocketServer {
   }
 
   sendMessageToClient(id:string, message:string) : void {
-    let client = this.getClientById(id);
+    const client = this.getClientById(id);
     if (client == undefined) {
-      console.warn('Not found a websocket client. id=' + id);
+      logger.warn(`Not found a websocket client. id=${id}`);
     } else {
       client.send(message);
     }
@@ -84,29 +88,48 @@ export class WebsocketServer {
 
   //
 
-  onConnect(ws: any, request: express.Request) : void {
-    const clientId:string = 'client_id_' + (this.count++);
-    const client:WebsocketClient = new WebsocketClient(this, clientId, ws);
+  onConnect(ws:any, request:express.Request) : void {
+    const remoteIPAddress = this.getRemoteIPAddress(request);
+    const clientId = 'client_id_' + (this.count++);
+    const client = new WebsocketClient(this, clientId, ws, remoteIPAddress);
     this.clients.set(clientId, client);
     try {
+      accessLogger.log(`WebSocket[${clientId}] connected. remoteIPAddress=${remoteIPAddress}`);
       this.emitter.emit(WSEvent.KEY_WS_CONNECTED, client);
     } catch (e) {
-      console.error('An error has occurred on onConnected.', e);
+      logger.error('An error has occurred on onConnected.', e);
     }
   }
 
   onDisconnect(client:WebsocketClient) : void {
     const clientId = client.getId();
     try {
+      accessLogger.log(`WebSocket[${clientId}] disconnected. remoteIPAddress=${client.getRemoteIPAddress()}`);
       this.clients.delete(clientId);
     } catch (e) {
-      console.error('Failed to delete a client. clientId=' + clientId, e);
+      logger.error(`Failed to delete a client. clientId=${clientId}`, e);
     } finally {
       try {
         this.emitter.emit(WSEvent.KEY_WS_DISCONNECTED, client);
       } catch (e) {
-        console.error('An error has occurred on onDisconnected.', e);
+        logger.error('An error has occurred on onDisconnected.', e);
       }
     }
+  }
+
+  onError(client:WebsocketClient, error:Error) : void {
+    logger.error(`WebSocket[${client.getId()}] error occurred:`, error);
+  }
+
+  private getRemoteIPAddress(request:express.Request): string {
+    const remoteAddress = request.ip;
+    if (remoteAddress) {
+      return remoteAddress;
+    }
+    const xForwardedFor = request.headers['x-forwarded-for'];
+    if (typeof xForwardedFor === 'string') {
+      return xForwardedFor.split(',')[0].trim();
+    }
+    return request.connection.remoteAddress || '';
   }
 }

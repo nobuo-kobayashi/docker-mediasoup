@@ -16,6 +16,8 @@ services:
       - MEDIASOUP_SSL=true
     volumes:
       - ./certs:/opt/certs
+      - ./mediasoup/config:/opt/config
+      - ./logs:/opt/logs
     tty: true
   media-server:
     build:

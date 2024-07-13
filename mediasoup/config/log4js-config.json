@@ -1,0 +1,32 @@
+{
+  "appenders": {
+    "console": {
+      "type": "console"
+    },
+    "app": {
+      "type": "dateFile",
+      "filename": "/opt/logs/mediasoup.log",
+      "pattern": "yyyy-MM-dd",
+      "numBackups": 7,
+      "compress": true
+    },
+    "access": {
+      "type": "dateFile",
+      "filename": "/opt/logs/access.log",
+      "pattern": "yyyy-MM-dd",
+      "numBackups": 7,
+      "compress": true
+    }
+  },
+  "categories": {
+    "default": {
+      "appenders": ["console", "app"],
+      "level": "all",
+      "enableCallStack": true
+    },
+    "access": { 
+      "appenders": ["console", "access"], 
+      "level": "all"
+    }
+  }
+}

@@ -55,7 +55,10 @@ void MediasoupClient::requestCreateProducer(std::string id, std::string kind, js
       {"id", id},
       {"parameters", json{
         {"kind", kind},
-        {"rtpParameters", rtpParameters}
+        {"rtpParameters", rtpParameters},
+        {"appData", json{
+          {"name", "test"},
+        }}
       }}
     }}
   };

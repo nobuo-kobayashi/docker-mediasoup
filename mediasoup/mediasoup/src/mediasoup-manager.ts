@@ -1,28 +1,57 @@
 import { Mediasoup } from "./mediasoup";
+import { getLogger } from "log4js";
+
+const logger = getLogger();
 
 export class MediasoupManager {
-  private mediasoups: Map<string, Mediasoup>
+  private mediasoups: Map<string, Mediasoup> = new Map();
+  private mediasoupConfigPath:string;
 
-  constructor() {
-    this.mediasoups = new Map();
+  constructor(mediasoupConfigPath:string) {
+    this.mediasoupConfigPath = mediasoupConfigPath;
   }
 
   getMediasoupById(id:string) : Mediasoup | undefined {
     return this.mediasoups.get(id);
   }
 
+  async createMediasoup(id:string, name:string) {
+    if (this.mediasoups.has(id)) {
+      return undefined;
+    }
+    const mediasoup = new Mediasoup(id, name);
+    await mediasoup.init(this.mediasoupConfigPath);
+    this.mediasoups.set(id, mediasoup);
+    return mediasoup;
+  }
+
+  removeMediasoup(id:string) {
+    const mediasoup = this.getMediasoupById(id);
+    if (mediasoup) {
+      if (!this.mediasoups.delete(id)) {
+        logger.warn(`Failed to delete a mediasoup. id=${id}`);
+      }
+      try {
+        mediasoup.close();
+      } catch (e) {
+        // ignore.
+      }
+    }
+  }
+
   async getOrCreateMediasoup(id:string) : Promise<Mediasoup> {
     let mediasoup = this.getMediasoupById(id);
     if (!mediasoup) {
-      mediasoup = new Mediasoup(id);
-      await mediasoup.init();
-      this.mediasoups.set(id, mediasoup);
+      mediasoup = await this.createMediasoup(id, '');
+      if (!mediasoup) {
+        throw Error(`Failed to create Mediasoup by id[${id}].`);
+      }
     }
     return mediasoup;
   }
 
   async getCapabilities(id:string) : Promise<any> {
-    let mediasoup = await this.getOrCreateMediasoup(id);
+    const mediasoup = await this.getOrCreateMediasoup(id);
     if (mediasoup) {
       return mediasoup.getCapabilities();
     }
@@ -30,7 +59,7 @@ export class MediasoupManager {
   }
 
   async createWebRtcTransport(id:string) : Promise<any> {
-    let mediasoup = await this.getOrCreateMediasoup(id);
+    const mediasoup = await this.getOrCreateMediasoup(id);
     if (mediasoup) {
       return await mediasoup.createWebRtcTransport();
     }
@@ -38,14 +67,14 @@ export class MediasoupManager {
   }
 
   async deleteTransport(id:string, transportId:string) : Promise<void> {
-    let mediasoup = await this.getOrCreateMediasoup(id);
+    const mediasoup = await this.getOrCreateMediasoup(id);
     if (mediasoup) {
-      await mediasoup.deleteTransport(transportId);
+      mediasoup.deleteTransport(transportId);
     }
   }
 
   async createPlainTransport(id:string, payload:any) : Promise<any> {
-    let mediasoup = await this.getOrCreateMediasoup(id);
+    const mediasoup = await this.getOrCreateMediasoup(id);
     if (mediasoup) {
       return await mediasoup.createPlainTransport(payload);
     }
@@ -53,7 +82,7 @@ export class MediasoupManager {
   }
 
   async connect(id:string, payload:any) : Promise<void> {
-    let mediasoup = await this.getOrCreateMediasoup(id);
+    const mediasoup = await this.getOrCreateMediasoup(id);
     if (mediasoup) {
       await mediasoup.connect(payload);
     }
@@ -61,16 +90,24 @@ export class MediasoupManager {
 
   // 映像・音声
 
-  async getProducers(id:string) : Promise<IterableIterator<string> | undefined> {
-    let mediasoup = await this.getOrCreateMediasoup(id);
+  async getProducerIds(id:string) : Promise<IterableIterator<string> | undefined> {
+    const mediasoup = await this.getOrCreateMediasoup(id);
     if (mediasoup) {
-      return await mediasoup.getProducers();
+      return mediasoup.getProducerIds();
+    }
+    return undefined;
+  }
+
+  async getProducers(id:string) : Promise<IterableIterator<any> | undefined> {
+    const mediasoup = await this.getOrCreateMediasoup(id);
+    if (mediasoup) {
+      return mediasoup.getProducers();
     }
     return undefined;
   }
 
   async findProducer(id:string, producerId:string) : Promise<any> {
-    let mediasoup = await this.getOrCreateMediasoup(id);
+    const mediasoup = await this.getOrCreateMediasoup(id);
     if (mediasoup) {
       return await mediasoup.findProducer(producerId);
     }
@@ -78,7 +115,7 @@ export class MediasoupManager {
   }
 
   async createProducer(id:string, payload:any) : Promise<any> {
-    let mediasoup = await this.getOrCreateMediasoup(id);
+    const mediasoup = await this.getOrCreateMediasoup(id);
     if (mediasoup) {
       return await mediasoup.createProducer(payload);
     }
@@ -86,7 +123,7 @@ export class MediasoupManager {
   }
 
   async pauseProducer(id:string, producerId:string) : Promise<any> {
-    let mediasoup = await this.getOrCreateMediasoup(id);
+    const mediasoup = await this.getOrCreateMediasoup(id);
     if (mediasoup) {
       return mediasoup.pauseProducer(producerId);
     }
@@ -94,7 +131,7 @@ export class MediasoupManager {
   }
 
   async resumeProducer(id:string, producerId:string) : Promise<any> {
-    let mediasoup = await this.getOrCreateMediasoup(id);
+    const mediasoup = await this.getOrCreateMediasoup(id);
     if (mediasoup) {
       return mediasoup.resumeProducer(producerId);
     }
@@ -102,7 +139,7 @@ export class MediasoupManager {
   }
 
   async createConsumer(id:string, payload:any) : Promise<any> {
-    let mediasoup = await this.getOrCreateMediasoup(id);
+    const mediasoup = await this.getOrCreateMediasoup(id);
     if (mediasoup) {
       return await mediasoup.createConsumer(payload);
     }
@@ -111,16 +148,16 @@ export class MediasoupManager {
 
   // データチャンネル
 
-  async getDataProducers(id:string) : Promise<IterableIterator<string> | undefined> {
-    let mediasoup = await this.getOrCreateMediasoup(id);
+  async getDataProducers(id:string) : Promise<IterableIterator<any> | undefined> {
+    const mediasoup = await this.getOrCreateMediasoup(id);
     if (mediasoup) {
-      return await mediasoup.getDataProducers();
+      return mediasoup.getDataProducers();
     }
     return undefined;
   }
 
   async createDataProducer(id:string, payload:any) : Promise<any> {
-    let mediasoup = await this.getOrCreateMediasoup(id);
+    const mediasoup = await this.getOrCreateMediasoup(id);
     if (mediasoup) {
       return await mediasoup.createDataProducer(payload);
     }
@@ -128,7 +165,7 @@ export class MediasoupManager {
   }
 
   async createDataConsumer(id:string, payload:any) : Promise<any> {
-    let mediasoup = await this.getOrCreateMediasoup(id);
+    const mediasoup = await this.getOrCreateMediasoup(id);
     if (mediasoup) {
       return await mediasoup.createDataConsumer(payload);
     }

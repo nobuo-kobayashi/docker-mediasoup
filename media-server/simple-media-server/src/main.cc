@@ -34,7 +34,7 @@ int main(int argc, char *argv[])
   }
 
   // mediasoup が起動するのに少し待機します。
-  sleep(5);
+  sleep(10);
 
   MediaServer main(settings);
   main.process();

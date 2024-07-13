@@ -4,9 +4,11 @@
       <v-card-title class="headline">Producer 一覧</v-card-title>
 
       <v-card-text>
-        <v-list @click:select="onSelectProducerId" v-for="(id) in dialogItems" :key="id">
-          <v-list-item :value="id">
-            <v-list-item-title>{{ id }}</v-list-item-title>
+        <v-list @click:select="onSelectProducerId" v-for="(item, index) in dialogItems" :key="index">
+          <v-list-item :value="item.id">
+            <v-list-item-title>{{ item.id }}</v-list-item-title>
+            <v-list-item-subtitle>{{ item.kind }}</v-list-item-subtitle>
+            <v-list-item-subtitle>{{ item.appData?.name }}</v-list-item-subtitle>
           </v-list-item>
         </v-list>
       </v-card-text>
@@ -30,7 +32,7 @@ export default defineComponent({
   data() {
     return {
       dialog: false,
-      dialogItems: []
+      dialogItems: [],
     }
   },
 

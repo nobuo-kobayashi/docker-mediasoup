@@ -16,5 +16,4 @@ COPY mediasoup/ ${WORK_FOLDER}
 
 RUN cd ${WORK_FOLDER} && yarn install
 
-CMD sh -c "yarn install && yarn start"
-
+CMD sh -c "yarn start"

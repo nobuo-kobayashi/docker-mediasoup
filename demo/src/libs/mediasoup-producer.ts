@@ -2,6 +2,11 @@ import { Device } from "mediasoup-client";
 import { Transport } from "mediasoup-client/lib/Transport";
 import { MediasoupEventEmitter } from './mediasoup-events';
 
+const ProducerType = {
+  Audio: 'audio',
+  Video: 'video'
+}
+
 export const ProducerEvent = {
   KEY_PRODUCER_CONNECT: 'producer-connect',
   KEY_PRODUCER_PRODUCE: 'producer-produce',
@@ -11,18 +16,25 @@ export class MediasoupProducer extends MediasoupEventEmitter {
   private device?:Device;
   private rtpCapabilities:object;
   private transport?:Transport;
-  private producer:any;
+  private transportId?:string;
+  private producer = new Map();
+  private paused = false;
 
   constructor(rtpCapabilities: object) {
     super();
     this.rtpCapabilities = rtpCapabilities;
   }
 
+  getTransportId() {
+    return this.transportId;
+  }
+
   async create(sendTransport:any) : Promise<void> {
+    this.transportId = sendTransport.id;
     this.device = new Device();
     await this.device.load({ routerRtpCapabilities: this.rtpCapabilities });
 
-    this.transport = await this.device.createSendTransport(sendTransport);
+    this.transport = this.device.createSendTransport(sendTransport);
     this.transport.on('connect', async ({ dtlsParameters }, callback, errback) => {
       if (!this.transport) {
         errback(new Error('transport is not initialized.'));
@@ -31,10 +43,10 @@ export class MediasoupProducer extends MediasoupEventEmitter {
 
       try {
         this.emit(ProducerEvent.KEY_PRODUCER_CONNECT, {
-          'type': 'connect', 
-          'payload': {
-            'id': this.transport.id,
-            'dtlsParameters': dtlsParameters
+          type: 'connect', 
+          payload: {
+            id: this.transport.id,
+            dtlsParameters: dtlsParameters
           }
         });
         callback();
@@ -51,10 +63,10 @@ export class MediasoupProducer extends MediasoupEventEmitter {
 
       try {
         this.emit(ProducerEvent.KEY_PRODUCER_PRODUCE, {
-          'type': 'produce', 
-          'payload': {
-            'id': this.transport.id,
-            'parameters': parameters
+          type: 'produce', 
+          payload: {
+            id: this.transport.id,
+            parameters: parameters
           }
         });
         callback({ id: this.transport.id });
@@ -66,19 +78,20 @@ export class MediasoupProducer extends MediasoupEventEmitter {
 
   async produce(stream: MediaStream) : Promise<void> {
     if (!this.transport) {
-      throw 'transport is not initialized.';
+      throw new Error('transport is not initialized.');
     }
 
-    try {
-      // 音声を流す場合
-      // const track = stream.getAudioTracks()[0];
-      // this.producer = await this.transport!.produce({ track });
+    const videoTracks = stream.getVideoTracks();
+    const audioTracks = stream.getAudioTracks();
 
+    // 映像を流す場合
+    if (videoTracks && videoTracks.length > 0) {
       const track = stream.getVideoTracks()[0];
-      this.producer = await this.transport.produce({ track });
+      const producer = await this.transport.produce({ track });
+      this.producer.set(ProducerType.Video, producer);
 
       // simulcast を使用する場合
-      // this.producer = await this.transport!.produce({
+      // this.producer = await this.transport.produce({
       //   track: track,
       //   encodings: [
       //     { maxBitrate: 900000, scaleResolutionDownBy: 1 },
@@ -89,27 +102,41 @@ export class MediasoupProducer extends MediasoupEventEmitter {
       //     videoGoogleStartBitrate : 1000
       //   }
       // });
-    } catch(e) {
-      console.log('Failed to create produce.', e);
+    }
+
+    // 音声を流す場合
+    if (audioTracks && audioTracks.length > 0) {
+      const track = stream.getAudioTracks()[0];
+      const producer = await this.transport.produce({ track });
+      this.producer.set(ProducerType.Audio, producer);
     }
   }
 
   isPaused() : boolean {
-    return this.producer?.paused;
+    return this.paused;
   }
 
   pause() : void {
-    this.producer?.pause();
+    for (const producer of this.producer.values()) {
+      producer.pause();
+    }
+    this.paused = true;
   }
 
   resume() : void {
-    this.producer?.resume();
+    for (const producer of this.producer.values()) {
+      producer.resume();
+    }
+    this.paused = false;
   }
 
   close() : void {
-    this.producer?.close();
-    this.producer = undefined;
+    for (const producer of this.producer.values()) {
+      producer.close();
+    }
+    this.producer.clear();
     this.transport?.close();
     this.transport = undefined;
+    this.paused = true;
   }
 }

@@ -9,6 +9,8 @@
 
 class Settings {
 public:
+  std::string name;
+
   // RTMP サーバ情報
   int port;
   std::string certFile;

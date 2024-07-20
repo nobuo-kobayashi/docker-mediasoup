@@ -9,14 +9,14 @@ const logger = getLogger();
 export class MediasoupServer {
   private websocketServer:WebsocketServer;
   private websocketClients:Map<string, MediasoupClient>;
-  private manager:MediasoupManager
+  private manager:MediasoupManager;
 
   constructor(app:any, server:any, serverOptions:any, mediasoupConfigPath:string) {
+    this.manager = new MediasoupManager(mediasoupConfigPath);
     this.websocketServer = new WebsocketServer(app, server, serverOptions);
     this.websocketServer.on(WSEvent.KEY_WS_CONNECTED, this.onConnected.bind(this));
     this.websocketServer.on(WSEvent.KEY_WS_DISCONNECTED, this.onDisconnected.bind(this));
     this.websocketClients = new Map();
-    this.manager = new MediasoupManager(mediasoupConfigPath);
   }
 
   onConnected(client:WebsocketClient) : void {

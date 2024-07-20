@@ -11,9 +11,10 @@ export const WSEvent = {
   KEY_WS_OPENED: 'wsopened',
   KEY_WS_CLOSED: 'wsclosed',
   KEY_WS_ERROR: 'wserror',
+  KEY_WS_MESSAGE: 'wsmessage',
   KEY_RTP_CAPABILITIES: 'rtpCapabilities',
   KEY_SEND_TRANSPORT: 'sendTransport',
-  KEY_SECV_TRANSPORT: 'recvTransport',
+  KEY_RECV_TRANSPORT: 'recvTransport',
   KEY_PRODUCER: 'producer',
   KEY_CONSUMER: 'consumer',
   KEY_DATA_SEND_TRANSPORT: 'dataSendTransport',
@@ -30,7 +31,7 @@ export class WebsocketClient {
   private closeFlag:boolean;
   private emitter:EventEmitter;
 
-  constructor (url:string) {
+  constructor(url:string) {
     this.url = url;
     this.ws = undefined;
     this.closeFlag = false;
@@ -42,6 +43,12 @@ export class WebsocketClient {
   }
 
   connect() {
+    if (this.isConnected()) {
+      // 既に接続されている場合は何もしません。
+      console.warn('Websocket has already connected.');
+      return true;
+    }
+
     this.ws = new WebSocket(this.url);
     this.ws.onopen = () => {
       // 既に close されている場合には、再度 close を呼び出します。
@@ -53,21 +60,7 @@ export class WebsocketClient {
     };
 
     this.ws.onmessage = (event:MessageEvent) => {
-      let json = null;
-      try {
-        json = JSON.parse(event.data);
-      } catch (e) {
-        console.error('error: ' + event.data, e);
-        return;
-      }
-
-      console.log('@@ this.ws.onmessage', json);
-
-      const type = json.type;
-      const payload = json.payload;
-      if (type && payload) {
-        this.emitter.emit(type, payload);
-      }
+      this.emitter.emit(WSEvent.KEY_WS_MESSAGE, event.data);
     };
 
     this.ws.onerror = (event:Event) => {
@@ -86,7 +79,11 @@ export class WebsocketClient {
     return this.ws && this.ws.readyState === WS_OPEN_STATE;
   }
 
-  send(msg:string) {
+  send(msg:string|object) {
+    if (typeof(msg) !== 'string') {
+      msg = JSON.stringify(msg);
+    }
+
     if (this.ws && this.isConnected()) {
       this.ws.send(msg);
     } else {

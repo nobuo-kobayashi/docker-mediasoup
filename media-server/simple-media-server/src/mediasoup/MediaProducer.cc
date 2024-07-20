@@ -27,6 +27,7 @@ MediaProducer::~MediaProducer()
 void MediaProducer::openVideo()
 {
   if (!info->videoInfo.enabled) {
+    LOG_INFO("Producer video is disabled.\n");
     return;
   }
 
@@ -46,6 +47,7 @@ void MediaProducer::openVideo()
 void MediaProducer::openAudio()
 {
   if (!info->audioInfo.enabled) {
+    LOG_INFO("Producer audio is disabled.\n");
     return;
   }
 

@@ -1,6 +1,6 @@
 #include "MediaServer.h"
 
-MediaServer::MediaServer(Settings& settings) : mSettings(settings)
+MediaServer::MediaServer(Settings& settings) : mSettings(settings), mMediasoupClient(settings.name)
 {
 }
 

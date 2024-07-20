@@ -1,17 +1,19 @@
 import { WebsocketClient, WSClientEvent } from "./websocket-client";
-import { MediasoupManager } from "./mediasoup-manager";
+import { MediasoupManager, DEFAULT_MEDIASOUP_ID } from "./mediasoup-manager";
 import { getLogger } from "log4js";
+import { Mediasoup } from "./mediasoup";
+import { MCError } from "./mediasoup-error";
 
-const logger = getLogger();
+const defaultLogger = getLogger();
 const accessLogger = getLogger('access');
 
-const MEDIASOUP_ID = 'mediasoup001';
+type MediasoupFunction = (id:string, payload:any) => Promise<any>;
 
 export class MediasoupClient {
   private manager:MediasoupManager;
   private client:WebsocketClient;
-  private transports:Array<any> = new Array();
-  private funcMap:Map<string, any> = new Map();
+  private transports:Map<string, any> = new Map();
+  private funcMap:Map<string, MediasoupFunction> = new Map();
 
   constructor(manager:MediasoupManager, client:WebsocketClient) {
     this.manager = manager;
@@ -19,53 +21,88 @@ export class MediasoupClient {
     this.client.on(WSClientEvent.KEY_ON_CLOSE, this.onClose.bind(this));
     this.client.on(WSClientEvent.KEY_ON_MESSAGE, this.onMessage.bind(this));
 
+    // リクエスト
     // {
+    //   id: 'xxxx',
+    //   uuid: 'XXXX'
     //   type: 'XXXX',
     //   payload: {}
     // }
 
+    // レスポンス
+    // {
+    //   id: 'xxxx',
+    //   uuid: 'XXXX'
+    //   type: 'XXXX',
+    //   payload: {},
+    //   error: {
+    //     code: 'xxxx',
+    //     message: 'XXXX'
+    //   }
+    // }
+
+    this.funcMap.set('getSessionList', this.getMediaSessionList.bind(this));
     this.funcMap.set('createSession', this.createMediaSession.bind(this));
+    this.funcMap.set('destroySession', this.destroyMediaSession.bind(this));
     this.funcMap.set('rtpCapabilities', this.getRtpCapabilities.bind(this));
-    this.funcMap.set('createSendTransport', this.createSendTransport.bind(this));
-    this.funcMap.set('createRecvTransport', this.createRecvTransport.bind(this));
+    this.funcMap.set('createPlainTransport', this.createPlainTransport.bind(this));
+    this.funcMap.set('createWebRtcTransport', this.createWebRtcTransport.bind(this));
+    this.funcMap.set('destroyPlainTransport', this.destroyPlainTransport.bind(this));
+    this.funcMap.set('destroyWebRtcTransport', this.destroyWebRtcTransport.bind(this));
     this.funcMap.set('connect', this.connect.bind(this));
     this.funcMap.set('produce', this.createProducer.bind(this));
     this.funcMap.set('consume', this.createConsumer.bind(this));
-    this.funcMap.set('createDataSendTransport', this.createDataSendTransport.bind(this));
-    this.funcMap.set('createDataRecvTransport', this.createDataRecvTransport.bind(this));
     this.funcMap.set('dataProduce', this.createDataProducer.bind(this));
     this.funcMap.set('dataConsume', this.createDataConsumer.bind(this));
     this.funcMap.set('producerList', this.getProducers.bind(this));
     this.funcMap.set('dataProducerList', this.getDataProducers.bind(this));
-    this.funcMap.set('createSendPlainTransport', this.createSendPlainTransport.bind(this));
-    this.funcMap.set('createRecvPlainTransport', this.createRecvPlainTransport.bind(this));
     this.funcMap.set('pauseProducer', this.pauseProducer.bind(this));
     this.funcMap.set('resumeProducer', this.resumeProducer.bind(this));
   }
 
   onClose(): void {
     // Websocket の接続が切れたら、mediasoup の設定を削除します。
-    for (let transport of this.transports) {
-      this.manager.deleteTransport(MEDIASOUP_ID, transport.id);
+    const mediasoup = this.manager.getMediasoupById(DEFAULT_MEDIASOUP_ID);
+    if (mediasoup) {
+      for (const transportId of this.transports.keys()) {
+        mediasoup.deleteTransport(transportId);
+      }
     }
+    this.transports.clear();
   }
 
-  onMessage(message:string) : void {
+  async onMessage(message:string) {
     let json = null;
     try {
       json = JSON.parse(message);
     } catch (e) {
-      logger.error('Failed to parse a json: ' + message, e);
+      defaultLogger.error(`Failed to parse a json: ${message}`, e);
       return;
     }
 
     accessLogger.log(`C[${this.client.getRemoteIPAddress()}] -> S recv: ${message}`);
 
-    const func = this.funcMap.get(json.type);
+    const id = json.id || '';
+    const uuid = json.uuid || '';
+    const type = json.type || '';
+    const func = this.funcMap.get(type);
     if (func) {
-      func(MEDIASOUP_ID, json.payload);
+      try {
+        const response = await func(DEFAULT_MEDIASOUP_ID, json.payload);
+        response.uuid = uuid;
+        this.send(response);
+      } catch (error) {
+        if (error instanceof MCError) {
+          this.sendError(uuid, type, error);
+        } else if (error instanceof Error) {
+          this.sendError(uuid, type, new MCError('unknown', error.message));
+        } else {
+          this.sendError(uuid, type, new MCError('unknown', 'unknown'));
+        }
+        defaultLogger.error(`Error: `, error);
+      }
     } else {
-      console.warn('Unkown type. type=' + json.type);
+      defaultLogger.warn(`Unknown type. type=${type}`);
     }
   }
 
@@ -79,6 +116,17 @@ export class MediasoupClient {
     this.client.send(message);
   }
 
+  private sendError(uuid:string, type:string, error:MCError) {
+    this.send({
+      uuid: uuid,
+      type: type,
+      error: {
+        code: error.code,
+        message: error.message
+      }
+    });
+  }
+
   private createRandomString() {
     const S = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
     const L = 32;
@@ -89,134 +137,139 @@ export class MediasoupClient {
     return rnd;
   }
 
-  async createMediaSession(_:string, payload:any) : Promise<void> {
+  private getMediasoupById(id:string) : Mediasoup {
+    const mediasoup = this.manager.getMediasoupById(id);
+    if (!mediasoup) {
+      throw new MCError('0', `Not found a mediasoup. id=${id}`);
+    }
+    return mediasoup;
+  }
+
+  private async getMediaSessionList(_id:string, _payload:any) : Promise<any> {
+    const list: any[] = [];
+    for (let mediasoup of this.manager.getMediasoupList()) {
+      list.push({
+        id: mediasoup?.getId(),
+        name: mediasoup?.getName()
+      });
+    }
+    return {
+      type: 'listSession',
+      payload: {
+        list: list
+      }
+    };
+  }
+
+  private async createMediaSession(_id:string, payload:any) : Promise<any> {
     const id = this.createRandomString();
     const { name } = payload;
-    const mediasoup = await this.manager.getOrCreateMediasoup(id);
-    this.send({
+    const mediasoup = await this.manager.createMediasoup(id, name);
+    if (!mediasoup) {
+      throw new MCError('0', 'Failed to create a Mediasoup.');
+    }
+    return {
       type: 'createSession',
+      payload: {
+        id: mediasoup.getId(),
+        name: name
+      }
+    };
+  }
+
+  private async destroyMediaSession(id:string, _payload:any) : Promise<any> {
+    const mediasoup = this.getMediasoupById(id);
+    this.manager.removeMediasoup(id);
+    return {
+      type: 'destroySession',
       payload: {
         id: mediasoup.getId()
       }
-    })
+    };
   }
 
-  async getRtpCapabilities(id:string, _:any) : Promise<void> {
-    const capabilities:any = await this.manager.getCapabilities(id);
-    this.send({
+  private async getRtpCapabilities(id:string, _payload:any) : Promise<any> {
+    const mediasoup = this.getMediasoupById(id);
+    const capabilities:any = mediasoup.getCapabilities();
+    return {
       type: 'rtpCapabilities',
       payload: {
         rtpCapabilities: capabilities
       }
-    });
+    };
   }
 
-  async createSendTransport(id:string, _:any) : Promise<void> {
-    const sendTransport:any = await this.manager.createWebRtcTransport(id);
-    if (sendTransport) {
-      this.transports.push(sendTransport);
-      this.send({
-        type: 'sendTransport',
-        payload: {
-          id: sendTransport.id,
-          iceParameters: sendTransport.iceParameters,
-          iceCandidates: sendTransport.iceCandidates,
-          dtlsParameters: sendTransport.dtlsParameters
-        }
-      });
+  private async createWebRtcTransport(id:string, _payload:any) : Promise<any> {
+    const mediasoup = this.getMediasoupById(id);
+    const webRtcTransport:any = await mediasoup.createWebRtcTransport();
+    if (!webRtcTransport) {
+      throw new MCError('0', 'Failed to create a WebRtcTransport.');
+    }
+    this.transports.set(webRtcTransport.id, webRtcTransport);
+    return {
+      type: 'createWebRtcTransport',
+      payload: {
+        id: webRtcTransport.id,
+        iceParameters: webRtcTransport.iceParameters,
+        iceCandidates: webRtcTransport.iceCandidates,
+        dtlsParameters: webRtcTransport.dtlsParameters,
+        sctpParameters: webRtcTransport.sctpParameters,
+      }
     }
   }
 
-  async createRecvTransport(id:string, _:any) : Promise<void> {
-    const recvTransport:any = await this.manager.createWebRtcTransport(id);
-    if (recvTransport) {
-      this.transports.push(recvTransport);
-      this.send({
-        type: 'recvTransport',
-        payload: {
-          id: recvTransport.id,
-          iceParameters: recvTransport.iceParameters,
-          iceCandidates: recvTransport.iceCandidates,
-          dtlsParameters: recvTransport.dtlsParameters
-        }
-      });
+  private async destroyWebRtcTransport(id:string, payload:any) : Promise<any> {
+    const mediasoup = this.getMediasoupById(id);
+    this.transports.delete(payload.id);
+    mediasoup.deleteTransport(payload.id);
+    return {
+      type: 'destroyWebRtcTransport',
+      payload: {}
     }
   }
 
-  async connect(id:string, payload:any) : Promise<void> {
-    await this.manager.connect(id, payload);
-  }
-
-  async createDataSendTransport(id:string, _:any) : Promise<void> {
-    const sendTransport:any = await this.manager.createWebRtcTransport(id);
-    if (sendTransport) {
-      this.transports.push(sendTransport);
-      this.send({
-        type: 'dataSendTransport',
-        payload: {
-          id: sendTransport.id,
-          iceParameters: sendTransport.iceParameters,
-          iceCandidates: sendTransport.iceCandidates,
-          dtlsParameters: sendTransport.dtlsParameters,
-          sctpParameters: sendTransport.sctpParameters,
-        }
-      });
+  private async createPlainTransport(id:string, payload:any) : Promise<any> {
+    const mediasoup = this.getMediasoupById(id);
+    const plainTransport:any = await mediasoup.createPlainTransport(payload);
+    if (!plainTransport) {
+      throw new MCError('0', 'Failed to create a PlainTransport.');
+    }
+    this.transports.set(plainTransport.id, plainTransport);
+    return {
+      type: 'createPlainTransport',
+      payload: {
+        id: plainTransport.id,
+        ip: plainTransport.tuple.localIp,
+        port: plainTransport.tuple.localPort,
+        rtcpPort: plainTransport.rtcpTuple ? plainTransport.rtcpTuple.localPort : undefined
+      }
     }
   }
 
-  async createDataRecvTransport(id:string, _:any) : Promise<void> {
-    const recvTransport:any = await this.manager.createWebRtcTransport(id);
-    if (recvTransport) {
-      this.transports.push(recvTransport);
-      this.send({
-        type: 'dataRecvTransport',
-        payload: {
-          id: recvTransport.id,
-          iceParameters: recvTransport.iceParameters,
-          iceCandidates: recvTransport.iceCandidates,
-          dtlsParameters: recvTransport.dtlsParameters,
-          sctpParameters: recvTransport.sctpParameters,
-        }
-      });
+  private async destroyPlainTransport(id:string, payload:any) : Promise<any> {
+    const mediasoup = this.getMediasoupById(id);
+    this.transports.delete(payload.id);
+    mediasoup.deleteTransport(payload.id);
+    return {
+      type: 'destroyPlainTransport',
+      payload: {}
     }
   }
 
-  async createSendPlainTransport(id:string, payload:any) : Promise<void> {
-    const plainTransport:any = await this.manager.createPlainTransport(id, payload);
-    if (plainTransport) {
-      this.transports.push(plainTransport);
-      this.send({
-        type: 'sendPlainTransport',
-        payload: {
-          id: plainTransport.id,
-          ip: plainTransport.tuple.localIp,
-          port: plainTransport.tuple.localPort,
-          rtcpPort: plainTransport.rtcpTuple ? plainTransport.rtcpTuple.localPort : undefined
-        }
-      });
-    }
+  private async connect(id:string, payload:any) : Promise<any> {
+    const mediasoup = this.getMediasoupById(id);
+    await mediasoup.connect(payload);
+    return {
+      type: 'connect',
+      payload: {}
+    };
   }
 
-  async createRecvPlainTransport(id:string, payload:any) : Promise<void> {
-    const plainTransport:any = await this.manager.createPlainTransport(id, payload);
-    if (plainTransport) {
-      this.transports.push(plainTransport);
-      this.send({
-        type: 'recvPlainTransport',
-        payload: {
-          id: plainTransport.id,
-          ip: plainTransport.tuple.localIp,
-          port: plainTransport.tuple.localPort,
-          rtcpPort: plainTransport.rtcpTuple ? plainTransport.rtcpTuple.localPort : undefined
-        }
-      });
-    }
-  }
-
-  async getProducers(id:string, _:any) : Promise<void> {
-    const producers = await this.manager.getProducers(id);
+  private async getProducers(id:string, _payload:any) : Promise<any> {
+    const mediasoup = this.getMediasoupById(id);
+    const producers = mediasoup.getProducers();
+    const producerList = [];
     if (producers) {
-      let producerList = [];
       for (const producer of producers) {
         producerList.push({
           id: producer.id,
@@ -226,51 +279,56 @@ export class MediasoupClient {
           appData: producer.appData
         })
       }
-      this.send({
-        type: 'producerList',
-        payload: {
-          producers: producerList
-        }
-      });
+    }
+    return {
+      type: 'producerList',
+      payload: {
+        producers: producerList
+      }
     }
   }
 
-  async createProducer(id:string, payload:any) : Promise<void> {
-    const producer:any = await this.manager.createProducer(id, payload);
-    if (producer) {
-      this.send({
-        type: 'producer',
-        payload: {
-          id: producer.id,
-          kind: producer.kind,
-          type: producer.type,
-          rtpParameters: producer.rtpParameters,
-          appData: producer.appData
-        }
-      });
+  private async createProducer(id:string, payload:any) : Promise<any> {
+    const mediasoup = this.getMediasoupById(id);
+    const producer:any = await mediasoup.createProducer(payload);
+    if (!producer) {
+      throw new MCError('0', 'Failed to create a Producer.');
+    }
+    return {
+      type: 'produce',
+      payload: {
+        id: producer.id,
+        kind: producer.kind,
+        type: producer.type,
+        rtpParameters: producer.rtpParameters,
+        appData: producer.appData
+      }
     }
   }
 
-  async createConsumer(id:string, payload:any) : Promise<void> {
-    const consumer:any = await this.manager.createConsumer(id, payload);
-    if (consumer) {
-      this.send({
-        type: 'consumer',
-        payload: {
-          id: consumer.id,
-          producerId: id,
-          kind: consumer.kind,
-          type: consumer.type,
-          rtpParameters: consumer.rtpParameters
-        }
-      });
+  private async createConsumer(id:string, payload:any) : Promise<any> {
+    const mediasoup = this.getMediasoupById(id);
+    const consumer:any = await mediasoup.createConsumer(payload);
+    if (!consumer) {
+      throw new MCError('0', 'Failed to create a Consumer.');
+    }
+    return {
+      type: 'consume',
+      payload: {
+        id: consumer.id,
+        producerId: id,
+        kind: consumer.kind,
+        type: consumer.type,
+        rtpParameters: consumer.rtpParameters
+      }
     }
   }
 
-  async getDataProducers(id:string, _:any) : Promise<void> {
-    const dataProducers = await this.manager.getDataProducers(id);
+  private async getDataProducers(id:string, _payload:any) : Promise<any> {
+    const mediasoup = this.getMediasoupById(id);
+    const dataProducers = mediasoup.getDataProducers();
+    const producerList = [];
     if (dataProducers) {
-      let producerList = [];
       for (const dataProducer of dataProducers) {
         producerList.push({
           id: dataProducer.id,
@@ -280,54 +338,68 @@ export class MediasoupClient {
           appData: dataProducer.appData
         })
       }
-      this.send({
-        type: 'dataProducerList',
-        payload: {
-          dataProducers: producerList
-        }
-      });
+    }
+    return {
+      type: 'dataProducerList',
+      payload: {
+        dataProducers: producerList
+      }
     }
   }
 
-  async createDataProducer(id:string, payload:any) : Promise<void> {
-    const dataProducer = await this.manager.createDataProducer(id, payload);
-    if (dataProducer) {
-      this.send({
-        type: 'dataProducer',
-        payload: {
-          dataProducerId: dataProducer.id,
-          type: dataProducer.type,
-          sctpStreamParameters: dataProducer.sctpStreamParameters,
-          label: dataProducer.label,
-          appData: dataProducer.appData
-        }
-      });
+  private async createDataProducer(id:string, payload:any) : Promise<any> {
+    const mediasoup = this.getMediasoupById(id);
+    const dataProducer = await mediasoup.createDataProducer(payload);
+    if (!dataProducer) {
+      throw new MCError('0', 'Failed to create a DataProducer.');
+    }
+    return {
+      type: 'dataProducer',
+      payload: {
+        dataProducerId: dataProducer.id,
+        type: dataProducer.type,
+        sctpStreamParameters: dataProducer.sctpStreamParameters,
+        label: dataProducer.label,
+        appData: dataProducer.appData
+      }
     }
   }
 
-  async createDataConsumer(id:string, payload:any) : Promise<void> {
-    const dataConsumer = await this.manager.createDataConsumer(id, payload);
-    if (dataConsumer) {
-      this.send({
-        type: 'dataConsumer',
-        payload: {
-          id: dataConsumer.id,
-          dataProducerId: dataConsumer.dataProducerId,
-          type: dataConsumer.type,
-          sctpStreamParameters: dataConsumer.sctpStreamParameters,
-          label: dataConsumer.label,
-          protocol: dataConsumer.protocol,
-          appData: dataConsumer.appData
-        }
-      });
+  private async createDataConsumer(id:string, payload:any) : Promise<any> {
+    const mediasoup = this.getMediasoupById(id);
+    const dataConsumer = await mediasoup.createDataConsumer(payload);
+    if (!dataConsumer) {
+      throw new MCError('0', 'Failed to create a DataConsumer.');
+    }
+    return {
+      type: 'dataConsumer',
+      payload: {
+        id: dataConsumer.id,
+        dataProducerId: dataConsumer.dataProducerId,
+        type: dataConsumer.type,
+        sctpStreamParameters: dataConsumer.sctpStreamParameters,
+        label: dataConsumer.label,
+        protocol: dataConsumer.protocol,
+        appData: dataConsumer.appData
+      }
     }
   }
 
-  async pauseProducer(id:string, payload:any) : Promise<void> {
-    await this.manager.pauseProducer(id, payload.producerId);
+  private async pauseProducer(id:string, payload:any) : Promise<any> {
+    const mediasoup = this.getMediasoupById(id);
+    mediasoup.pauseProducer(payload.producerId);
+    return {
+      type: 'pauseProducer',
+      payload: {}
+    }
   }
 
-  async resumeProducer(id:string, payload:any) : Promise<void> {
-    await this.manager.resumeProducer(id, payload.producerId);
+  private async resumeProducer(id:string, payload:any) : Promise<any> {
+    const mediasoup = this.getMediasoupById(id);
+    mediasoup.resumeProducer(payload.producerId);
+    return {
+      type: 'resumeProducer',
+      payload: {}
+    }
   }
 }

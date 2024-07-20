@@ -18,7 +18,7 @@ void OpusRTPSender::send(const char *data, const uint32_t dataLen)
 {
   int status = mSession.SendPacket(data, dataLen, mPayloadType, true, mTimestampIncrement);
   if (status < 0) {
-    LOG_ERROR("Failed to send a message. dstIP=%d.%d.%d.%d:%d\n", mDestIP[0],mDestIP[1],mDestIP[2],mDestIP[3],mDestPort);
+    LOG_ERROR("Failed to send a opus rtp packet. dstIP=%d.%d.%d.%d:%d\n", mDestIP[0],mDestIP[1],mDestIP[2],mDestIP[3],mDestPort);
     return;
   }
 }

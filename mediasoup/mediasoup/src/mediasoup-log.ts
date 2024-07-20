@@ -17,6 +17,13 @@ export function initLog4js(filePath:string) {
           "pattern": "yyyy-MM-dd",
           "numBackups": 7,
           "compress": true
+        },
+        "access": {
+          "type": "dateFile",
+          "filename": "/opt/logs/access.log",
+          "pattern": "yyyy-MM-dd",
+          "numBackups": 7,
+          "compress": true
         }
       },
       "categories": {
@@ -24,6 +31,10 @@ export function initLog4js(filePath:string) {
           "appenders": ["console", "app"],
           "level": "all",
           "enableCallStack": true
+        },
+        "access": { 
+          "appenders": ["console", "access"], 
+          "level": "all"
         }
       }
     });

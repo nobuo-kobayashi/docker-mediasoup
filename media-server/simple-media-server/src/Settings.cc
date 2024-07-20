@@ -12,7 +12,7 @@ void SettingsLoader::load(std::string& filePath, Settings *settings)
   i >> j;
 
   settings->port = 1935;
-  settings->ws = "wss://mediasoup:3000";
+  settings->ws = "ws://mediasoup:3000";
   settings->origin = "localhost";
 
   if (j.find("rtmp-server") != j.end()) {
@@ -28,6 +28,9 @@ void SettingsLoader::load(std::string& filePath, Settings *settings)
 
   if (j.find("mediasoup") != j.end()) {
     auto mediasoup = j["mediasoup"];
+    if (mediasoup.find("name") != mediasoup.end()) {
+      settings->name = mediasoup["name"].get<std::string>();
+    }
     if (mediasoup.find("ws") != mediasoup.end()) {
       settings->ws = mediasoup["ws"].get<std::string>();
     }
@@ -81,6 +84,7 @@ void SettingsLoader::load(std::string& filePath, Settings *settings)
 void SettingsLoader::print(Settings *settings)
 {
   LOG_INFO("------------------------------------\n");
+  LOG_INFO("Mediasoup name: %s\n", settings->name.c_str());
   LOG_INFO("Mediasoup websocket url: %s\n", settings->ws.c_str());
   LOG_INFO("origin: %s\n", settings->origin.c_str());
   LOG_INFO("------------------------------------\n");

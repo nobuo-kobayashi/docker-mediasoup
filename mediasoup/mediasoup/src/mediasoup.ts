@@ -26,11 +26,10 @@ export class Mediasoup {
     this.name = name;
     this.webRtcTransportOptions = {
       listenIps: [
-        { ip: "127.0.0.1" },
-        { ip: "0.0.0.0" }
+        { ip: "127.0.0.1" }, { ip: "0.0.0.0" }
       ],
       enableUdp: true,
-      enableTcp: true,
+      enableTcp: false,
       preferUdp: true,
       enableSctp: true,
       initialAvailableOutgoingBitrate: 100000000
@@ -70,6 +69,7 @@ export class Mediasoup {
     this.worker = await createWorker(workerOptions);
     this.worker.on('died', () => {
       logger.error('mediasoup worker died.');
+      this.close();
     });
     this.router = await this.worker.createRouter({ mediaCodecs });
   }
@@ -80,6 +80,10 @@ export class Mediasoup {
     this.router = undefined;
     this.worker?.close();
     this.worker = undefined;
+    this.producers.clear();
+    this.consumers.clear();
+    this.dataProducers.clear();
+    this.dataConsumers.clear();
   }
 
   getCapabilities() {
@@ -100,11 +104,11 @@ export class Mediasoup {
   }
 
   async createPlainTransport(payload:any) : Promise<any> {
-    const transportOptions = payload;
+    const { rtcpMux, comedia } = payload;
     const transport = await this.router.createPlainTransport({
       listenIp: this.plainTransportOptions.listenIp,
-      rtcpMux : transportOptions.rtcpMux,
-      comedia : transportOptions.comedia
+      rtcpMux : rtcpMux,
+      comedia : comedia
     });
     transport.observer.on('close', () => {
       if (!this.transports.delete(transport.id)) {
@@ -115,16 +119,30 @@ export class Mediasoup {
     return transport;
   }
 
+  getTransport(id:string) {
+    return this.transports.get(id);
+  }
+
   deleteTransport(id:string) : void {
+    // this.transports の Map から削除するのは、transport の close イベント
+    // で行なっているために、ここでは、Map からの削除は行わない。
     const transport = this.transports.get(id);
     if (transport) {
-      transport.close();
+      try {
+        transport.close();
+      } catch (e) {
+        // ignore.
+      }
     }
   }
 
   deleteAllTransport() : void {
     for (const transport of this.transports.values()) {
-      transport.close();
+      try {
+        transport.close();
+      } catch (e) {
+        // ignore.
+      }
     }
     this.transports.clear();
   }
@@ -165,9 +183,9 @@ export class Mediasoup {
 
   async createProducer(payload:any) : Promise<any> {
     try {
-      const producerOptions = payload;
-      const transport = this.transports.get(producerOptions.id);
-      const producer = await transport.produce(producerOptions.parameters);
+      const { id, parameters } = payload;
+      const transport = this.transports.get(id);
+      const producer = await transport.produce(parameters);
       producer.observer.on('close', () => {
         if (!this.producers.delete(producer.id)) {
           logger.warn(`Failed to delete a producer. id=${producer.id}`);
@@ -179,6 +197,14 @@ export class Mediasoup {
       logger.error(`Failed to create a Producer. payload:`, payload, e);
     }
     return undefined;
+  }
+
+  async deleteProducer(payload:any) : Promise<void> {
+    const { id } = payload;
+    const producer = this.findProducer(id);
+    if (producer) {
+      producer.close();
+    }
   }
 
   // 映像・音声 Consumer
@@ -207,20 +233,20 @@ export class Mediasoup {
 
   async createConsumer(payload:any) : Promise<any> {
     try {
-      const consumerOptions = payload;
+      const { id, producerId, rtpCapabilities } = payload;
 
       if (!this.router.canConsume({
-        producerId: consumerOptions.producerId, 
-        rtpCapabilities: consumerOptions.rtpCapabilities
+        producerId: producerId, 
+        rtpCapabilities: rtpCapabilities
       })) {
         logger.warn(`Can not consume. payload:`, payload);
         return undefined;
       }
 
-      const transport = this.transports.get(consumerOptions.id);
+      const transport = this.transports.get(id);
       const consumer = await transport?.consume({
-        producerId: consumerOptions.producerId,
-        rtpCapabilities: consumerOptions.rtpCapabilities
+        producerId: producerId,
+        rtpCapabilities: rtpCapabilities
       });
       consumer.observer.on('close', () => {
         if (!this.consumers.delete(consumer.id)) {
@@ -233,6 +259,14 @@ export class Mediasoup {
       logger.error(`Failed to create a Consumer. payload:`, payload, e);
     }
     return undefined;
+  }
+
+  async deleteConsumer(payload:any) : Promise<void> {
+    const { id } = payload;
+    const consumer = this.findConsumer(id);
+    if (consumer) {
+      consumer.close();
+    }
   }
 
   // データチャンネル DataProducer
@@ -265,9 +299,9 @@ export class Mediasoup {
 
   async createDataProducer(payload:any) : Promise<any> {
     try {
-      const dataProducerOptions = payload;
-      const transport = this.transports.get(dataProducerOptions.id);
-      const dataProducer = await transport.produceData(dataProducerOptions.parameters);
+      const { id, parameters } = payload;
+      const transport = this.transports.get(id);
+      const dataProducer = await transport.produceData(parameters);
       dataProducer.observer.on('close', () => {
         if (!this.dataProducers.delete(dataProducer.id)) {
           logger.warn(`Failed to delete a dataProducer. id=${dataProducer.id}`);
@@ -307,10 +341,10 @@ export class Mediasoup {
 
   async createDataConsumer(payload:any) : Promise<any> {
     try {
-      const dataConsumerOptions = payload;
-      const transport = this.transports.get(dataConsumerOptions.id);
+      const { id, dataProducerId } = payload;
+      const transport = this.transports.get(id);
       const dataConsumer = await transport.consumeData({
-        dataProducerId: dataConsumerOptions.dataProducerId
+        dataProducerId: dataProducerId
       });
       dataConsumer.observer.on('close', () => {
         if (!this.dataConsumers.delete(dataConsumer.id)) {

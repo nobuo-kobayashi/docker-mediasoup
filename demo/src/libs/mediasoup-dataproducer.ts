@@ -10,6 +10,7 @@ export const DataProducerEvent = {
 export class MediasoupDataProducer extends MediasoupEventEmitter {
   private device?:Device;
   private rtpCapabilities:object;
+  private transportId?:string;
   private transport?:Transport;
   private dataProducer:any;
 
@@ -18,11 +19,16 @@ export class MediasoupDataProducer extends MediasoupEventEmitter {
     this.rtpCapabilities = rtpCapabilities;
   }
 
+  getTransportId() {
+    return this.transportId;
+  }
+
   async create(sendTransport:any) : Promise<void> {
+    this.transportId = sendTransport.id;
     this.device = new Device();
     await this.device.load({ routerRtpCapabilities: this.rtpCapabilities });
 
-    this.transport = await this.device.createSendTransport(sendTransport);
+    this.transport = this.device.createSendTransport(sendTransport);
     this.transport.on('connect', async ({ dtlsParameters }, callback, errback) => {
       if (!this.transport) {
         errback(new Error('transport is not initialized.'));
@@ -31,10 +37,10 @@ export class MediasoupDataProducer extends MediasoupEventEmitter {
 
       try {
         this.emit(DataProducerEvent.KEY_DATA_PRODUCER_CONNECTED, {
-          'type': 'connect', 
-          'payload': {
-            'id': this.transport.id,
-            'dtlsParameters': dtlsParameters
+          type: 'connect', 
+          payload: {
+            id: this.transport.id,
+            dtlsParameters: dtlsParameters
           }
         });
         callback();
@@ -51,10 +57,10 @@ export class MediasoupDataProducer extends MediasoupEventEmitter {
 
       try {
         this.emit(DataProducerEvent.KEY_DATA_PRODUCER_PRODUCE, {
-          'type': 'dataProduce',
-          'payload': {
-            'id': this.transport.id,
-            'parameters': parameters
+          type: 'dataProduce',
+          payload: {
+            id: this.transport.id,
+            parameters: parameters
           }
         });
         callback({ id: this.transport.id });
@@ -66,14 +72,10 @@ export class MediasoupDataProducer extends MediasoupEventEmitter {
 
   async dataProduce() : Promise<void> {
     if (!this.transport) {
-      throw 'transport is not initialized.';
+      throw new Error('transport is not initialized.');
     }
 
-    try {
-      this.dataProducer = await this.transport.produceData();
-    } catch(e) {
-      console.log('Failed to create produce.', e);
-    }
+    this.dataProducer = await this.transport.produceData();
   }
 
   send(message:string) : void {

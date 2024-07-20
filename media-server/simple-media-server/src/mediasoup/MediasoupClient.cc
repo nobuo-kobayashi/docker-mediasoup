@@ -1,6 +1,13 @@
 #include "MediasoupClient.h"
 
-MediasoupClient::MediasoupClient()
+#define UUID_CREATE_SESSION "createSession"
+#define UUID_CREATE_PLAIN_TRANSPORT "createPlainTransport"
+#define UUID_CREATE_PRODUCER "createProducer"
+#define UUID_DESTROY_SESSION "destroySession"
+#define UUID_PAUSE_PRODUCER "pauseProducer"
+#define UUID_RESUME_PRODUCER "resumeProducer"
+
+MediasoupClient::MediasoupClient(std::string name) : mName(name)
 {
 }
 
@@ -36,7 +43,8 @@ void MediasoupClient::createNextProducer()
 void MediasoupClient::requestPlainRtpTransport()
 {
   json j = json{
-    {"type", "createSendPlainTransport"},
+    {"uuid", UUID_CREATE_PLAIN_TRANSPORT},
+    {"type", "createPlainTransport"},
     {"payload", json{
       {"rtcpMux", false},
       {"comedia", true}
@@ -50,6 +58,7 @@ void MediasoupClient::requestPlainRtpTransport()
 void MediasoupClient::requestCreateProducer(std::string id, std::string kind, json rtpParameters)
 {
   json j = json{
+    {"uuid", UUID_CREATE_PRODUCER},
     {"type", "produce"},
     {"payload", json{
       {"id", id},
@@ -57,9 +66,37 @@ void MediasoupClient::requestCreateProducer(std::string id, std::string kind, js
         {"kind", kind},
         {"rtpParameters", rtpParameters},
         {"appData", json{
-          {"name", "test"},
+          {"name", mName.c_str()},
         }}
       }}
+    }}
+  };
+
+  std::string msg = j.dump();
+  mWebsocketClient.sendMessage(msg);
+}
+
+void MediasoupClient::createMediaSession(std::string name)
+{
+  json j = json{
+    {"uuid", UUID_CREATE_SESSION},
+    {"type", "createSession"},
+    {"payload", json{
+      {"name", name.c_str()}
+    }}
+  };
+
+  std::string msg = j.dump();
+  mWebsocketClient.sendMessage(msg);
+}
+
+void MediasoupClient::destroyMediaSession()
+{
+  json j = json{
+    {"uuid", UUID_DESTROY_SESSION},
+    {"type", "destroySession"},
+    {"payload", json{
+      {"name", mId.c_str()}
     }}
   };
 
@@ -101,6 +138,7 @@ void MediasoupClient::pause(std::string streamKey)
   if (producer) {
     {
       json j = json{
+        {"uuid", UUID_PAUSE_PRODUCER},
         {"type", "pauseProducer"},
         {"payload", json{
           {"producerId", producer->video.id}
@@ -111,6 +149,7 @@ void MediasoupClient::pause(std::string streamKey)
     }
     {
       json j = json{
+        {"uuid", UUID_PAUSE_PRODUCER},
         {"type", "pauseProducer"},
         {"payload", json{
           {"producerId", producer->audio.id}
@@ -128,6 +167,7 @@ void MediasoupClient::resume(std::string streamKey)
   if (producer) {
     {
       json j = json{
+        {"uuid", UUID_RESUME_PRODUCER},
         {"type", "resumeProducer"},
         {"payload", json{
           {"producerId", producer->video.id}
@@ -138,6 +178,7 @@ void MediasoupClient::resume(std::string streamKey)
     }
     {
       json j = json{
+        {"uuid", UUID_RESUME_PRODUCER},
         {"type", "resumeProducer"},
         {"payload", json{
           {"producerId", producer->audio.id}
@@ -147,6 +188,11 @@ void MediasoupClient::resume(std::string streamKey)
       mWebsocketClient.sendMessage(msg);
     }
   }
+}
+
+void MediasoupClient::onMediasoupCreateSession(json& payload)
+{
+
 }
 
 void MediasoupClient::onMediasoupSendPlainTransport(json& payload)
@@ -187,8 +233,7 @@ void MediasoupClient::onMediasoupSendPlainTransport(json& payload)
       };
 
       requestCreateProducer(id, "video", rtpParameters);
-    }
-      break;
+    } break;
     case CreatingAudio:
     {
       producer->audio.id = id;
@@ -217,10 +262,10 @@ void MediasoupClient::onMediasoupSendPlainTransport(json& payload)
       };
 
       requestCreateProducer(id, "audio", rtpParameters);
-    }
-      break;
-    default:
-      break;
+    } break;
+    default: {
+      LOG_WARN("producer state is unknown. state=%d\n", producer->state);
+    } break;
   }
 }
 
@@ -238,18 +283,16 @@ void MediasoupClient::onMediasoupProducer(json& payload)
         mCreatingProducers.pop();
         createNextProducer();
       }
-    }
-      break;
+    } break;
     case CreatingAudio:
     {
       producer->state = Created;
       mCreatingProducers.pop();
       createNextProducer();
-    }
-      break;
-    default:
+    } break;
+    default: {
       LOG_WARN("MediaProducer state is unknown. state=%d\n", producer->state);
-      break;
+    } break;
   }
 }
 
@@ -277,16 +320,20 @@ void MediasoupClient::onMessage(WebsocketClient *client, std::string& message)
   const char *text = message.c_str();
   if (text) {
     json j = json::parse(text);
-    if (j.find("type") != j.end() && j.find("payload") != j.end()) {
-      auto type = j["type"].get<std::string>();
+    if (j.find("uuid") != j.end() && j.find("payload") != j.end()) {
+      auto uuid = j["uuid"].get<std::string>();
       auto payload = j["payload"].get<json>();
-      if (type.compare("sendPlainTransport") == 0) {
+      if (uuid.compare(UUID_CREATE_SESSION) == 0) {
+        onMediasoupCreateSession(payload);
+      } else if (uuid.compare(UUID_CREATE_PLAIN_TRANSPORT) == 0) {
         onMediasoupSendPlainTransport(payload);
-      } else if (type.compare("producer") == 0) {
+      } else if (uuid.compare(UUID_CREATE_PRODUCER) == 0) {
         onMediasoupProducer(payload);
+      } else if (uuid.compare(UUID_PAUSE_PRODUCER) == 0) {
+      } else if (uuid.compare(UUID_RESUME_PRODUCER) == 0) {
       } else {
-        LOG_WARN("Unknown type. type=%s\n", type.c_str());
-      }      
+        LOG_WARN("Unknown uuid. uuid=%s\n", uuid.c_str());
+      }
     } else {
       LOG_WARN("type or payload not found. json=%s\n", text);
     }

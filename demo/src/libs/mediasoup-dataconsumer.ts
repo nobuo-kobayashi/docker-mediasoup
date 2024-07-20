@@ -11,6 +11,7 @@ export const DataConsumerEvent = {
 export class MediasoupDataConsumer extends MediasoupEventEmitter {
   private device?:Device;
   private rtpCapabilities:object;
+  private transportId?:string;
   private transport?:Transport;
   private dataProducerId?:string;
   private dataConsumer:any;
@@ -20,7 +21,12 @@ export class MediasoupDataConsumer extends MediasoupEventEmitter {
     this.rtpCapabilities = rtpCapabilities;
   }
 
+  getTransportId() {
+    return this.transportId;
+  }
+
   async create(recvTransport:any, dataProducerId:string) : Promise<void> {
+    this.transportId = recvTransport.id;
     this.dataProducerId = dataProducerId;
     this.device = new Device();
     await this.device.load({ routerRtpCapabilities: this.rtpCapabilities });
@@ -34,10 +40,10 @@ export class MediasoupDataConsumer extends MediasoupEventEmitter {
 
       try {
         this.emit(DataConsumerEvent.KEY_DATA_CONSUMER_CONNECTED, {
-          'type': 'connect',
-          'payload': {
-            'id': this.transport.id, 
-            'dtlsParameters': dtlsParameters
+          type: 'connect',
+          payload: {
+            id: this.transport.id, 
+            dtlsParameters: dtlsParameters
           }
         });
         callback();
@@ -47,29 +53,30 @@ export class MediasoupDataConsumer extends MediasoupEventEmitter {
     });
 
     this.emit(DataConsumerEvent.KEY_DATA_CONSUMER_CONSUME, {
-      'type': 'dataConsume', 
-      'payload': {
-        'id': this.transport.id,
-        'dataProducerId': this.dataProducerId
+      type: 'dataConsume', 
+      payload: {
+        id: this.transport.id,
+        dataProducerId: this.dataProducerId
       }
     });
   }
 
   async dataConsume(consumerOptions:any) : Promise<void> {
     if (!this.transport) {
-      throw 'transport is not initialized.';
+      throw new Error('transport is not initialized.');
     }
     if (!this.dataProducerId) {
-      throw 'dataProducerId is not initialized.';
+      throw new Error('dataProducerId is not initialized.');
     }
 
     this.dataConsumer = await this.transport.consumeData({
-      'id': consumerOptions.id,
-      'dataProducerId': this.dataProducerId,
-      'sctpStreamParameters': consumerOptions.sctpStreamParameters,
-      'label': consumerOptions.label,
-      'protocol': consumerOptions.protocol,
+      id: consumerOptions.id,
+      dataProducerId: this.dataProducerId,
+      sctpStreamParameters: consumerOptions.sctpStreamParameters,
+      label: consumerOptions.label,
+      protocol: consumerOptions.protocol,
     });
+
     this.dataConsumer.on('message', (msg:string) => {
       this.emit(DataConsumerEvent.KEY_DATA_CONSUMER_MESSAGE, msg);
     });

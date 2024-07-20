@@ -16,13 +16,13 @@ announcedIp は、SDP に格納される IP アドレスになります。<br>
   "webRtcTransportOptions": {
     "listenIps": [
       { "ip": "127.0.0.1" },
-      { "ip": "0.0.0.0", "announcedIp": "192.168.2.30" }
+      { "ip": "0.0.0.0", "announcedIp": "Your IP address" }
     ],
         :
        省略
         :
   "plainTransportOptions": {
-    "listenIp": { "ip": "0.0.0.0", "announcedIp": "192.168.2.30" }
+    "listenIp": { "ip": "0.0.0.0", "announcedIp": "Your IP address" }
   }
 ```
 

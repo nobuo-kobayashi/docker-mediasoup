@@ -7,7 +7,7 @@
     </v-row>
     <v-row>
       <v-col cols="4">
-        <v-btn @click="onSendTransport" block>
+        <v-btn @click="onCreateProducer" block>
           Producer作成
         </v-btn>
       </v-col>
@@ -23,7 +23,7 @@
         <v-text-field label="ProducerId" v-model="producerId" block></v-text-field>
       </v-col>
       <v-col cols="2">
-        <v-btn @click="onRecvTransport" block>
+        <v-btn @click="onCreateConsumer" block>
           Consumer作成
         </v-btn>
       </v-col>
@@ -59,7 +59,7 @@
     </v-row>
     <v-row>
       <v-col cols="4">
-        <v-btn @click="onDataSendTransport" block>
+        <v-btn @click="onCreateDataProducer" block>
           DataProducer作成
         </v-btn>
       </v-col>
@@ -75,7 +75,7 @@
         <v-text-field label="DataProducerId" v-model="dataProducerId" block></v-text-field>
       </v-col>
       <v-col cols="2">
-        <v-btn @click="onDataRecvTransport" block>
+        <v-btn @click="onCreateDataConsumer" block>
           DataConsumer作成
         </v-btn>
       </v-col>
@@ -153,11 +153,7 @@ export default defineComponent({
   mounted() {
     this.mediasoup.on(DemoEvent.KEY_WS_OPEN, this.onWSOpen.bind(this));
     this.mediasoup.on(DemoEvent.KEY_WS_CLOSE, this.onWSClose.bind(this));
-    this.mediasoup.on(DemoEvent.KEY_ON_PRODUCER_ID, this.onProducerId.bind(this));
-    this.mediasoup.on(DemoEvent.KEY_ON_DATA_PRODUCER_ID, this.onDataProducerId.bind(this));
     this.mediasoup.on(DemoEvent.KEY_ON_MESSAGE, this.onDataChannelMessage.bind(this));
-    this.mediasoup.on(DemoEvent.KEY_ON_PRODUCER_LIST, this.onProducerList.bind(this));
-    this.mediasoup.on(DemoEvent.KEY_ON_DATA_PRODUCER_LIST, this.onDataProducerList.bind(this));
   },
 
   methods: {
@@ -170,36 +166,19 @@ export default defineComponent({
       console.log('ws closed');
     },
 
-    onProducerId(producerId:string) : void {
-      this.producerId = producerId;
-    },
-
-    onDataProducerId(dataProducerId:string) : void {
-      this.dataProducerId = dataProducerId;
-    },
-
     onDataChannelMessage(message:string) : void {
       this.recvText += message;
       this.recvText += '<br>';
     },
 
-    onProducerList(producerList:any) : void {
-      console.log('onProducerList', producerList);
-      this.producerDialogItems = producerList;
-      (this.$refs.producerDialog as any).open(producerList);
+    async onUpdateProducerList() : Promise<void> {
+      this.producerDialogItems = await this.mediasoup.requestGetProducerList();
+      (this.$refs.producerDialog as any).open(this.producerDialogItems);
     },
 
-    onDataProducerList(dataProducerList:any) : void {
-      console.log('onDataProducerList', dataProducerList);
+    async onUpdateDataProducerList() : Promise<void> {
+      const dataProducerList = await this.mediasoup.requestGetDataProducerList();
       (this.$refs.dataProducerDialog as any).open(dataProducerList);
-    },
-
-    onUpdateProducerList() : void {
-      this.mediasoup.requestGetProducerList();
-    },
-
-    onUpdateDataProducerList() : void {
-      this.mediasoup.requestGetDataProducerList();
     },
 
     async onSelectProducerId(response:string) : Promise<void> {
@@ -210,19 +189,17 @@ export default defineComponent({
       this.dataProducerId = response;
     },
 
-    async onSendTransport() : Promise<void> {
+    async onCreateProducer() : Promise<void> {
       if (!this.mediasoup.isWSConnected()) {
         console.warn('websocket is not connected.');
         return;
       }
       // カメラの映像を配信する場合は、こちらを使用します。
       // カメラやディスプレイの取得は https か localhost 以外では使用できないので注意。
-      this.mediasoup.setMediaStream(await this.getCameraStream());
-      // this.mediasoup.setMediaStream(this.getCanvasStream());
-      this.mediasoup.requestCreateProducer();
+      this.mediasoup.requestCreateProducer(await this.getCameraStream());
     },
 
-    async onRecvTransport() : Promise<void> {
+    async onCreateConsumer() : Promise<void> {
       if (!this.mediasoup.isWSConnected()) {
         console.warn('websocket is not connected.');
         return;
@@ -231,12 +208,10 @@ export default defineComponent({
         console.warn('this.producerId is not set.');
         return;
       }
-      this.mediasoup.setProducerId(this.producerId);
-      this.mediasoup.setRemoteVideo(this.getVideoElement());
-      this.mediasoup.requestCreateConsumer();
+      this.mediasoup.requestCreateConsumer(this.producerId, this.getVideoElement());
     },
     
-    async onDataSendTransport() : Promise<void> {
+    async onCreateDataProducer() : Promise<void> {
       if (!this.mediasoup.isWSConnected()) {
         console.warn('websocket is not connected.');
         return;
@@ -244,7 +219,7 @@ export default defineComponent({
       this.mediasoup.requestCreateDataProducer();
     },
 
-    async onDataRecvTransport() : Promise<void> {
+    async onCreateDataConsumer() : Promise<void> {
       if (!this.mediasoup.isWSConnected()) {
         console.warn('websocket is not connected.');
         return;
@@ -253,8 +228,7 @@ export default defineComponent({
         console.warn('this.dataProducerId is not set.');
         return;
       }
-      this.mediasoup.setDataProducerId(this.dataProducerId);
-      this.mediasoup.requestCreateDataConsumer();
+      this.mediasoup.requestCreateDataConsumer(this.dataProducerId);
     },
 
     onSendDataChannel() : void {
@@ -269,21 +243,25 @@ export default defineComponent({
     },
 
     async getCameraStream() : Promise<MediaStream> {
-      // let cameraStream = await navigator.mediaDevices.getDisplayMedia({video: true, audio: false});
-      let cameraStream = await navigator.mediaDevices.getUserMedia({video: true, audio: false});
-      return cameraStream;
+      const mediaStream = await navigator.mediaDevices.getUserMedia({video: true, audio: true});
+      return mediaStream;
+    },
+
+    async getDisplayMediaStream() : Promise<MediaStream> {
+      const mediaStream = await navigator.mediaDevices.getDisplayMedia({video: true, audio: false});
+      return mediaStream;
     },
 
     getCanvasStream() : MediaStream {
-      let canvas:HTMLCanvasElement = this.startRenderingCanvas();
-      let canvasStream:MediaStream = canvas.captureStream(30);
+      const canvas:HTMLCanvasElement = this.startRenderingCanvas();
+      const canvasStream:MediaStream = canvas.captureStream(30);
       return canvasStream;
     },
 
     startRenderingCanvas() : HTMLCanvasElement {
-      let element = document.getElementById('canvas');
-      let canvas:HTMLCanvasElement = element! as HTMLCanvasElement;
-      let ctx:CanvasRenderingContext2D = canvas.getContext('2d')!;
+      const element = document.getElementById('canvas');
+      const canvas:HTMLCanvasElement = element! as HTMLCanvasElement;
+      const ctx:CanvasRenderingContext2D = canvas.getContext('2d')!;
       function _canvasUpdate() {
         ctx.fillStyle = '#FFFFFF';
         ctx.rect(0, 0, canvas.width, canvas.height);
@@ -298,8 +276,8 @@ export default defineComponent({
     },
 
     getVideoElement() : HTMLVideoElement {
-      let element = document.getElementById('video');
-      let video:HTMLVideoElement = element! as HTMLVideoElement;
+      const element = document.getElementById('video');
+      const video:HTMLVideoElement = element! as HTMLVideoElement;
       return video;
     },
 

@@ -46,7 +46,7 @@ void H264RTPSender::sendSingleNalUnitPacket(const char *data, const uint32_t dat
 
   int status = mSession.SendPacket(data, dataLen, mPayloadType, mark, mark ? mTimestampIncrement : 0);
   if (status < 0) {
-    LOG_ERROR("Failed to send a message.\n");
+    LOG_ERROR("Failed to send Nal unit packet.\n");
     return;
   }
 }
@@ -103,7 +103,7 @@ void H264RTPSender::sendFragmentationUnitsPacket(const char *data, const uint32_
 
       int status = mSession.SendPacket(rtpBuf, MAXLEN + 2, mPayloadType, false, 0);
       if (status < 0) {
-        LOG_ERROR("Failed to send a start message.\n");
+        LOG_ERROR("Failed to send start of h264 RTP packet.\n");
         return;
       }
     } else if (pi == num) {
@@ -118,7 +118,7 @@ void H264RTPSender::sendFragmentationUnitsPacket(const char *data, const uint32_
 
       int status = mSession.SendPacket(rtpBuf, more + 2, mPayloadType, true, mTimestampIncrement);
       if (status < 0) {
-        LOG_ERROR("Failed to send a end message.\n");
+        LOG_ERROR("Failed to send end of h264 RTP packet.\n");
         return;
       }
     } else {
@@ -132,7 +132,7 @@ void H264RTPSender::sendFragmentationUnitsPacket(const char *data, const uint32_
 
       int status = mSession.SendPacket(rtpBuf, MAXLEN + 2, mPayloadType, false, 0);
       if (status < 0) {
-        LOG_ERROR("Failed to send a middle message.\n");
+        LOG_ERROR("Failed to send middle of h264 RTP packet.\n");
         return;
       }
     }

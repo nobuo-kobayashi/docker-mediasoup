@@ -2,7 +2,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "Settings.h"
-#include "MediaServer.h"
+#include "server/MediaServer.h"
 #include "utils/WebsocketClient.h"
 #include "utils/Log.h"
 

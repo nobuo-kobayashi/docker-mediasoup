@@ -23,16 +23,16 @@ export class MediasoupClient {
 
     // リクエスト
     // {
-    //   id: 'xxxx',
     //   uuid: 'XXXX'
+    //   id: 'xxxx',
     //   type: 'XXXX',
     //   payload: {}
     // }
 
     // レスポンス
     // {
-    //   id: 'xxxx',
     //   uuid: 'XXXX'
+    //   id: 'xxxx',
     //   type: 'XXXX',
     //   payload: {},
     //   error: {
@@ -82,8 +82,8 @@ export class MediasoupClient {
 
     accessLogger.log(`C[${this.client.getRemoteIPAddress()}] -> S recv: ${message}`);
 
-    const id = json.id || '';
     const uuid = json.uuid || '';
+    const id = json.id || '';
     const type = json.type || '';
     const func = this.funcMap.get(type);
     if (func) {
@@ -276,8 +276,8 @@ export class MediasoupClient {
           kind: producer.kind,
           type: producer.type,
           rtpParameters: producer.rtpParameters,
-          appData: producer.appData
-        })
+          appData: producer.appData,
+        });
       }
     }
     return {

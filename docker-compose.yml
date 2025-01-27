@@ -11,7 +11,7 @@ services:
       - "40000-40100:40000-40100/udp"
     environment:
       - TZ=Asia/Tokyo
-      - MEDIASOUP_IP=192.168.2.25
+      - MEDIASOUP_IP=192.168.2.21
       - MEDIASOUP_PORT=3000
       - MEDIASOUP_SSL=true
     volumes:

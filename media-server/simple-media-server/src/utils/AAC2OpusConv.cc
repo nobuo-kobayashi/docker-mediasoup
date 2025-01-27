@@ -2,7 +2,9 @@
 #include "Log.h"
 
 #define MAX_DECODE_BUFFER_SIZE (10 * 1024)
+#define MAX_ENCODE_BUFFER_SIZE (20 * 1024)
 #define OPUS_FRAME_SIZE 960
+
 
 AAC2OpusConv::AAC2OpusConv()
 {
@@ -38,6 +40,19 @@ void AAC2OpusConv::destroy()
   mDecoder.destroy();
   mEncoder.destroy();
   mBuf.clear();
+}
+
+int32_t AAC2OpusConv::conv(const uint8_t *inBuffer, uint32_t inBufferSize, CallbackFunction callback)
+{
+  if (decode(inBuffer, inBufferSize) < 0) {
+    return -1;
+  }
+  uint8_t encodeData[MAX_ENCODE_BUFFER_SIZE];
+  int32_t encodeSize = 0;
+  while ((encodeSize = encode(encodeData, MAX_ENCODE_BUFFER_SIZE)) > 0) {
+    callback(encodeData, encodeSize);
+  }
+  return 1;
 }
 
 int32_t AAC2OpusConv::decode(const uint8_t *inBuffer, uint32_t inBufferSize)

@@ -1,6 +1,7 @@
 import { Device } from "mediasoup-client";
 import { Transport } from "mediasoup-client/lib/Transport";
 import { MediasoupEventEmitter } from './mediasoup-events';
+import { MediasoupConsumerParams } from "./mediasoup-types";
 
 const ConsumerType = {
   Audio: 'audio',
@@ -9,29 +10,43 @@ const ConsumerType = {
 
 export const ConsumerEvent = {
   KEY_CONSUMER_CONNECTED: 'consumer-connected',
-  KEY_CONSUMER_CONSUME: 'consumer-consume'
+  KEY_CONSUMER_CONSUME: 'consumer-consume',
+  KEY_CONSUMER_DATA_CONSUME: 'consumer-data-consume',
+  KEY_CONSUMER_MESSAGE: 'consumer-message',
 }
 
 export class MediasoupConsumer extends MediasoupEventEmitter {
   private device?:Device;
   private rtpCapabilities:object;
   private transport?:Transport;
-  private transportId?:string;
-  private producerId?:string;
+  private producerIds?:Array<string>;
   private consumer = new Map();
+  private params:MediasoupConsumerParams;
 
-  constructor(rtpCapabilities:object) {
+  constructor(rtpCapabilities:object, params:MediasoupConsumerParams) {
     super();
     this.rtpCapabilities = rtpCapabilities;
+    this.params = params;
+  }
+
+  getId() {
+    return this.params.id;
+  }
+
+  getParams() {
+    return this.params;
   }
 
   getTransportId() {
-    return this.transportId;
+    return this.transport?.id;
   }
 
-  async create(recvTransport:any, producerId:string) : Promise<void> {
-    this.transportId = recvTransport.id;
-    this.producerId = producerId;
+  getProducerIds() {
+    return this.producerIds;
+  }
+
+  async create(recvTransport:any, producerIds:Array<string>) : Promise<void> {
+    this.producerIds = producerIds;
     this.device = new Device();
     await this.device.load({ routerRtpCapabilities: this.rtpCapabilities });
 
@@ -56,24 +71,26 @@ export class MediasoupConsumer extends MediasoupEventEmitter {
       }
     });
 
-    this.emit(ConsumerEvent.KEY_CONSUMER_CONSUME, {
-      type: 'consume', 
-      payload: {
-        id: this.transport.id,
-        producerId: this.producerId,
-        rtpCapabilities: this.device.rtpCapabilities
-      }
-    });
+    for (const producerId of producerIds) {
+      this.emit(ConsumerEvent.KEY_CONSUMER_CONSUME, {
+        type: 'consume', 
+        payload: {
+          id: this.transport.id,
+          producerId: producerId,
+          rtpCapabilities: this.device.rtpCapabilities
+        }
+      });
+    }
   }
 
-  async consume(consumerOptions:any) : Promise<void> {
+  async consume(producerId:string, consumerOptions:any) : Promise<void> {
     if (!this.transport) {
       throw new Error('transport is not initialized.');
     }
 
     const consumer = await this.transport.consume({
       id: consumerOptions.id,
-      producerId: this.producerId,
+      producerId: producerId,
       kind: consumerOptions.kind,
       rtpParameters: consumerOptions.rtpParameters
     });

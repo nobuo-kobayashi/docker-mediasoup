@@ -20,6 +20,6 @@ private:
   AVCDecoderConfigurationRecordParser() {}
 
 public:
-  static void parse(const char *data, uint32_t dataLen, AVCDecoderConfigurationRecord *avcConfig);
+  static void parse(const uint8_t *data, uint32_t dataLen, AVCDecoderConfigurationRecord *avcConfig);
   static void print(AVCDecoderConfigurationRecord *avcConfig);
 };

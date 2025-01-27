@@ -28,16 +28,21 @@ message("RTMP_LIBRARY_DIRS: ${RTMP_LIBRARY_DIRS}")
 # C コンパイルフラグを設定
 set(CMAKE_C_FLAGS "-Wall -DUSE_OPENSSL -D_CRT_SECURE_NO_WARNINGS")
 set(CMAKE_C_FLAGS_DEBUG "-g3 -O0 -pg")
-set(CMAKE_C_FLAGS_RELEASE "-O2 -s -DNDEBUG -march=native")
-set(CMAKE_C_FLAGS_RELWITHDEBINFO "-g3 -Og -pg")
-set(CMAKE_C_FLAGS_MINSIZEREL "-Os -s DNDEBUG -march=native")
+set(CMAKE_C_FLAGS_RELEASE "-O3 -flto -s -DNDEBUG -march=native")
+set(CMAKE_C_FLAGS_RELWITHDEBINFO "-g3 -O2 -flto -pg")
+set(CMAKE_C_FLAGS_MINSIZEREL "-Os -s -DNDEBUG -march=native -flto")
 
 # C++ コンパイルフラグを設定
 set(CMAKE_CXX_FLAGS "-Wall -DUSE_OPENSSL -D_CRT_SECURE_NO_WARNINGS -std=c++17")
 set(CMAKE_CXX_FLAGS_DEBUG "-g -DDEBUG_BUILD")
-set(CMAKE_CXX_FLAGS_RELEASE "-O2 -s -DNDEBUG -march=native")
-set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-g3 -Og -pg")
-set(CMAKE_CXX_FLAGS_MINSIZEREL "-Os -s DNDEBUG -march=native")
+set(CMAKE_CXX_FLAGS_RELEASE "-O3 -flto -s -DNDEBUG -march=native -funroll-loops")
+set(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-g3 -O2 -flto -pg")
+set(CMAKE_CXX_FLAGS_MINSIZEREL "-Os -s -DNDEBUG -march=native -flto")
+
+# リンカフラグに LTO を追加
+set(CMAKE_EXE_LINKER_FLAGS_RELEASE "-flto")
+set(CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO "-flto")
+set(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "-flto")
 
 # 実行ファイルの作成
 add_executable(simple-media-server
@@ -46,6 +51,7 @@ add_executable(simple-media-server
   src/codec/aac/AACDecoder.cc
   src/codec/aac/AudioSpecificConfig.cc
   src/codec/h264/AVCDecoderConfigurationRecord.cc
+  src/codec/h264/H264Nal.cc
   src/codec/opus/OpusEncoder.cc
   src/rtmp/RTMPClient.cc
   src/rtmp/RTMPServer.cc
@@ -58,7 +64,10 @@ add_executable(simple-media-server
   src/utils/BitReader.cc
   src/utils/NetworkUtils.cc
   src/utils/WebsocketClient.cc
-  src/MediaServer.cc
+  src/server/FrameBufferCache.cc
+  src/server/MediaServer.cc
+  src/server/MediasoupOutput.cc
+  src/server/RTMPInput.cc
   src/Settings.cc
   src/main.cc)
 

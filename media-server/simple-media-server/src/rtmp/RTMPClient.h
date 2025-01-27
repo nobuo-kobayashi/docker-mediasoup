@@ -8,7 +8,7 @@
 
 #include "../codec/aac/AudioSpecificConfig.h"
 #include "../codec/h264/AVCDecoderConfigurationRecord.h"
-
+#include "../codec/h264/H264Nal.h"
 #include "../utils/BaseThread.h"
 #include "../utils/Log.h"
 #include "../utils/NetworkUtils.h"
@@ -22,8 +22,8 @@ public:
   virtual void onClosed(RTMPClient *client) {}
   virtual void onReceivedVideoConfig(RTMPClient *client, AVCDecoderConfigurationRecord *config) {}
   virtual void onReceivedAudioConfig(RTMPClient *client, AudioSpecificConfig *config) {}
-  virtual void onReceivedVideoData(RTMPClient *client, const char *data, uint32_t size, uint32_t timestamp) {}
-  virtual void onReceivedAudioData(RTMPClient *client, const char *data, uint32_t size, uint32_t timestamp) {}
+  virtual void onReceivedVideoData(RTMPClient *client, const uint8_t *data, uint32_t size, uint32_t timestamp) {}
+  virtual void onReceivedAudioData(RTMPClient *client, const uint8_t *data, uint32_t size, uint32_t timestamp) {}
 };
 
 class RTMPClient : public BaseThread {

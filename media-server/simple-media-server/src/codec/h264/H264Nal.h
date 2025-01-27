@@ -1,5 +1,8 @@
 #pragma once
 
+#include "AVCDecoderConfigurationRecord.h"
+#include <functional>
+
 // https://github.com/zoltanmaric/h264-fer/blob/master/FER-H264/FER-H264/nal.cpp
 // https://github.com/GStreamer/gst-plugins-bad/blob/ca8068c6d793d7aaa6f2e2cc6324fdedfe2f33fa/gst-libs/gst/codecparsers/gsth264parser.c#L1553
 // https://github-wiki-see.page/m/uupaa/H264.js/wiki/TechnicalTerm
@@ -91,3 +94,10 @@
 //     bit(8*pictureParameterSetLength) pictureParameterSetNALUnit;
 //   }
 // }
+
+class H264NALUnitParser {
+public:
+  typedef std::function<void(const uint8_t *data, uint32_t size)> CallbackFunction;
+
+  static void parse(const uint8_t *data, uint32_t dataLen, AVCDecoderConfigurationRecord *avcConfig, CallbackFunction callback);
+};

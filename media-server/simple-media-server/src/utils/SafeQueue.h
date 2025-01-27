@@ -13,7 +13,7 @@ public:
   SafeQueue() {
   }
 
-  ~SafeQueue() {
+  virtual ~SafeQueue() {
     clear();
   }
 

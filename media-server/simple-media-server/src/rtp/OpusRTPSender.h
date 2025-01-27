@@ -7,5 +7,5 @@ public:
   OpusRTPSender();
   virtual ~OpusRTPSender();
 
-  virtual void send(const char *data, const uint32_t dataLen) override;
+  virtual void send(const uint8_t *data, const uint32_t dataLen) override;
 };

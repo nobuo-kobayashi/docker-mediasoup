@@ -38,6 +38,6 @@ public:
   void closeVideo();
   void closeAudio();
 
-  void sendVideo(const char *data, const uint32_t size);
-  void sendAudio(const char *data, const uint32_t size);
+  void sendVideo(const uint8_t *data, const uint32_t size);
+  void sendAudio(const uint8_t *data, const uint32_t size);
 };

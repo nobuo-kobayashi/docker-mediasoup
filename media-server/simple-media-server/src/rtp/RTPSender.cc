@@ -82,6 +82,7 @@ void RTPSender::open()
   sessParams.SetAcceptOwnPackets(false);
   sessParams.SetOwnTimestampUnit(1.0/mFrequency);
   sessParams.SetUsePredefinedSSRC(false);
+  sessParams.SetSessionBandwidth(4 * 1000 * 1000);
 
   RTPUDPv4TransmissionParams transparams;
   transparams.SetPortbase(mPortBase);

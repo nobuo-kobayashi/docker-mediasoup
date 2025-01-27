@@ -9,6 +9,7 @@ export const DataConsumerEvent = {
 }
 
 export class MediasoupDataConsumer extends MediasoupEventEmitter {
+  private id:string;
   private device?:Device;
   private rtpCapabilities:object;
   private transportId?:string;
@@ -18,6 +19,7 @@ export class MediasoupDataConsumer extends MediasoupEventEmitter {
 
   constructor(rtpCapabilities:object) {
     super();
+    this.id = 'aaaabbcc';
     this.rtpCapabilities = rtpCapabilities;
   }
 
@@ -31,7 +33,7 @@ export class MediasoupDataConsumer extends MediasoupEventEmitter {
     this.device = new Device();
     await this.device.load({ routerRtpCapabilities: this.rtpCapabilities });
 
-    this.transport = await this.device.createRecvTransport(recvTransport);
+    this.transport = this.device.createRecvTransport(recvTransport);
     this.transport.on('connect', async ({ dtlsParameters }, callback, errback) => {
       if (!this.transport) {
         errback(new Error('transport is not initialized.'));

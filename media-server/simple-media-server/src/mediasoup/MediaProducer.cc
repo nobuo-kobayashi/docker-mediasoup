@@ -37,6 +37,7 @@ void MediaProducer::openVideo()
     sender->setDestPort(video.port);
     sender->setPortBase(0);
     sender->setFrequency(info->videoInfo.codec.clockRate);
+    sender->setPayloadType(info->videoInfo.codec.payloadType);
     sender->open();
     mVideoSender = sender;
   } else {
@@ -57,6 +58,7 @@ void MediaProducer::openAudio()
     sender->setDestPort(audio.port);
     sender->setPortBase(0);
     sender->setFrequency(info->audioInfo.codec.clockRate);
+    sender->setPayloadType(info->audioInfo.codec.payloadType);
     sender->open();
     mAudioSender = sender;
   } else {
@@ -90,14 +92,14 @@ void MediaProducer::closeAudio()
   mAudioSender = nullptr;
 }
 
-void MediaProducer::sendVideo(const char *data, const uint32_t size)
+void MediaProducer::sendVideo(const uint8_t *data, const uint32_t size)
 {
   if (mVideoSender) {
     mVideoSender->send(data, size);
   }
 }
 
-void MediaProducer::sendAudio(const char *data, const uint32_t size)
+void MediaProducer::sendAudio(const uint8_t *data, const uint32_t size)
 {
   if (mAudioSender) {
     mAudioSender->send(data, size);

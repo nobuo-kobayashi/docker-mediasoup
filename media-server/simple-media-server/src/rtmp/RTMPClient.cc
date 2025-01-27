@@ -80,6 +80,8 @@ RTMPClient::~RTMPClient()
 
 void RTMPClient::disconnect()
 {
+  stopThread();
+
   if (mSocketfd) {
     ::close(mSocketfd);
     mSocketfd = 0;
@@ -88,7 +90,7 @@ void RTMPClient::disconnect()
 
 void RTMPClient::runThread()
 {
-  // 接続元の ip アドレスを表示
+  // 接続元の ip アドレスを表示します。
   char destch[16] = { 0 };
   NetworkUtils::GetIPAddress(mSocketfd, destch);
   LOG_INFO("RTMPClient connected: IP=%s.\n", destch);
@@ -171,6 +173,7 @@ cleanup:
     }
 
     RTMP_Free(rtmp);
+    rtmp = NULL;
   }
 }
 
@@ -393,7 +396,7 @@ void RTMPClient::HandleChangeChunkSize(RTMP *rtmp, const RTMPPacket *packet)
 
 void RTMPClient::HandleInvoke(RTMP *r, const RTMPPacket *packet)
 {
-  const char *body = packet->m_body;
+  uint8_t *body = (uint8_t *) packet->m_body;
   unsigned int nBodySize = packet->m_nBodySize;
 
   if (body[0] != 0x02) {
@@ -402,7 +405,7 @@ void RTMPClient::HandleInvoke(RTMP *r, const RTMPPacket *packet)
   }
 
   AMFObject obj;
-  int nRes = AMF_Decode(&obj, body, nBodySize, FALSE);
+  int nRes = AMF_Decode(&obj, (const char *) body, nBodySize, FALSE);
   if (nRes >= 0) {
     ParseAMFObject(r, &obj);
     AMF_Reset(&obj);
@@ -413,16 +416,15 @@ void RTMPClient::HandleInvoke(RTMP *r, const RTMPPacket *packet)
 
 void RTMPClient::HandleInfo(RTMP *r, const RTMPPacket *packet)
 {
-  const char *body = packet->m_body;
+  uint8_t *body = (uint8_t *) packet->m_body;
   uint32_t nBodySize = packet->m_nBodySize;
 
   // TODO: 未実装
-
-LOG_INFO("   INFO: ");
-for (int i = 0; i < 20; i++) {
-  LOG_INFO(" 0x%02x", (unsigned char) body[i]);
-}
-LOG_INFO("   size=%d\n", nBodySize);
+  LOG_INFO("   INFO: ");
+  for (int i = 0; i < 20; i++) {
+    LOG_INFO(" 0x%02x", body[i]);
+  }
+  LOG_INFO("   size=%d\n", nBodySize);
 }
 
 // https://ossrs.io/lts/en-us/assets/files/video_file_format_spec_v10_1-95842d5d9c6e7091c510b72655ea9df7.pdf
@@ -433,10 +435,9 @@ LOG_INFO("   size=%d\n", nBodySize);
 // |    UB[4]    |   UB[2]   |   UI[1]   |    UB[1]  |     UI8       |
 // +-------------+-----------+-----------+-----------+---------------+--------------
 
-
 void RTMPClient::HandleAudio(RTMP *r, const RTMPPacket *packet)
 {
-  const char *body = packet->m_body;
+  uint8_t *body = (uint8_t *) packet->m_body;
   uint32_t nBodySize = packet->m_nBodySize;
   uint32_t timestamp = packet->m_nTimeStamp;
 
@@ -451,30 +452,19 @@ void RTMPClient::HandleAudio(RTMP *r, const RTMPPacket *packet)
       // AAC sequence header
       // https://csclub.uwaterloo.ca/~ehashman/ISO14496-3-2009.pdf
       // 1.6.2.1 AudioSpecificConfig 
-      AudioSpecificConfigParser::parse((const uint8_t *)&body[2], nBodySize - 2, &mAacConfig);
+      AudioSpecificConfigParser::parse(&body[2], nBodySize - 2, &mAacConfig);
       if (mListener) {
         mListener->onReceivedAudioConfig(this, &mAacConfig);
       }
       conv.init(&mAacConfig);
     } else if (AACPacketType == RTMP_AUDIO_AAC_PACKET_TYPE_AAC_RAW) {
-      // AAC raw
-      // if (mListener) {
-      //   mListener->OnReceivedAudioData(this, (const uint8_t *)&body[2], nBodySize - 2, timestamp);
-      // }
-
       // タイムスタンプ: frameSize/sampleRate = 1024/48000 = 0.021秒 = 21ms
       // OBS からは、21ms ごとに送られてきているっぽい。
-
-      // AAC を Opus に変換をかけて配信します。
       if (mListener) {
-        if (conv.decode((const uint8_t *)&body[2], nBodySize - 2) < 0) {
-          LOG_ERROR("error\n");
-        }
-        uint8_t encodeData[20 * 1024];
-        int32_t encodeSize = 0;
-        while ((encodeSize = conv.encode(encodeData, 20 * 1024)) > 0) {
-          mListener->onReceivedAudioData(this, (const char *)encodeData, encodeSize, timestamp);
-        }
+        // AAC を Opus に変換します。
+        conv.conv(&body[2], nBodySize - 2, [this, timestamp](const uint8_t *data, uint32_t size) {
+          mListener->onReceivedAudioData(this, data, size, timestamp);
+        });
       }
     }
   } else {
@@ -493,7 +483,7 @@ void RTMPClient::HandleAudio(RTMP *r, const RTMPPacket *packet)
 
 void RTMPClient::HandleVideo(RTMP *r, const RTMPPacket *packet)
 {
-  const char *body = packet->m_body;
+  uint8_t *body = (uint8_t *) packet->m_body;
   uint32_t nBodySize = packet->m_nBodySize;
   uint32_t timestamp = packet->m_nTimeStamp;
 
@@ -512,25 +502,10 @@ void RTMPClient::HandleVideo(RTMP *r, const RTMPPacket *packet)
         mListener->onReceivedVideoConfig(this, &mAvcConfig);
       }
     } else if (AVCPacketType == RTMP_VIDEO_AVC_PACKET_TYPE_AVC_NALU) {
-      // AVC NALU
-      const char *nalBytes = &body[5];
-      size_t nalByteSize = nBodySize - 5;
-      uint32_t index = 0;
-      int NALUnitLen = mAvcConfig.lengthSizeMinusOne + 1;
-
-      // NAL Unit ごとに分解して、リスナーに通知します。
-      while (index < nalByteSize) {
-        uint32_t NALUnitSize = 0;
-        for (int i = 0; i < NALUnitLen; i++) {
-          NALUnitSize <<= 8;
-          NALUnitSize |= (nalBytes[index++] & 0xFF);
-        }
-
-        if (mListener) {
-          mListener->onReceivedVideoData(this, &nalBytes[index], NALUnitSize, timestamp);
-        }
-
-        index += NALUnitSize;
+      if (mListener) {
+        H264NALUnitParser::parse(&body[5], nBodySize - 5, &mAvcConfig, [this, timestamp](const uint8_t *data, uint32_t size) {
+          mListener->onReceivedVideoData(this, data, size, timestamp);
+        });
       }
     } else if (AVCPacketType == RTMP_VIDEO_AVC_PACKET_TYPE_AVC_EOS) {
       // AVC end sequence

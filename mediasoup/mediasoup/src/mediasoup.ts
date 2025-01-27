@@ -26,16 +26,16 @@ export class Mediasoup {
     this.name = name;
     this.webRtcTransportOptions = {
       listenIps: [
-        { ip: "127.0.0.1" }, { ip: "0.0.0.0" }
+        { ip: '0.0.0.0' }
       ],
       enableUdp: true,
       enableTcp: false,
       preferUdp: true,
       enableSctp: true,
-      initialAvailableOutgoingBitrate: 100000000
+      initialAvailableOutgoingBitrate: 1000000
     }
     this.plainTransportOptions = {
-      listenIp: { ip: "0.0.0.0" }
+      listenIp: { ip: '0.0.0.0' }
     }
   }
 
@@ -54,7 +54,22 @@ export class Mediasoup {
     plainTransportOptions: mediasoupTypes.PlainTransportOptions
   } {
     const configFile = fs.readFileSync(configPath, 'utf-8');
-    return JSON.parse(configFile);
+    const config = JSON.parse(configFile);
+    if (announcedIp) {
+      // webRtcTransportOptions の announcedIp に新しい値を追加します。
+      if (Array.isArray(config.webRtcTransportOptions?.listenIps)) {
+        config.webRtcTransportOptions.listenIps.forEach((listenIp: any) => {
+          if (listenIp.announcedIp) {
+            listenIp.announcedIp = announcedIp;
+          }
+        });
+      }
+      // plainTransportOptions の announcedIp に新しい値を追加します。
+      if (config.plainTransportOptions?.listenIp?.announcedIp) {
+        config.plainTransportOptions.listenIp.announcedIp = announcedIp;
+      }
+    }
+    return config;
   }
 
   async init(configPath:string) : Promise<void> {
@@ -357,5 +372,18 @@ export class Mediasoup {
       logger.error(`Failed to create a DataConsumer. payloa:`, payload, e);
     }
     return undefined;
+  }
+
+  async printStats() {
+    const workerStats = await this.worker.getStats();
+    const routerStats = await this.router.getStats();
+
+    logger.debug(`--------------------${this.id}--------------------`);
+    logger.debug('Worker stats: ', workerStats);
+    logger.debug('Router stats: ', routerStats);
+    for (const [key, producer] of this.producers) {
+      const producerStats = await producer.getStats();
+      logger.debug(`Producer[${producer.id}] stats: `, producerStats);
+    }
   }
 }

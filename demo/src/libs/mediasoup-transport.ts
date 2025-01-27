@@ -8,5 +8,27 @@ export const ProducerEvent = {
 }
 
 export class MediasoupTransport extends MediasoupEventEmitter {
-  private transport?:Transport;
+  protected device?:Device;
+  protected rtpCapabilities:object;
+  protected transport?:Transport;
+
+  constructor(rtpCapabilities: object) {
+    super();
+    this.rtpCapabilities = rtpCapabilities;
+  }
+
+  getTransportId() {
+    return this.transport?.id;
+  }
+
+  async createDevice() : Promise<Device> {
+    this.device = new Device();
+    await this.device.load({ routerRtpCapabilities: this.rtpCapabilities });
+    return this.device;
+  }
+
+  close() : void {
+    this.transport?.close();
+    this.transport = undefined;
+  }
 }

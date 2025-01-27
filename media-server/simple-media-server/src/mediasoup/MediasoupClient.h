@@ -25,6 +25,8 @@ private:
   WebsocketClient mWebsocketClient;
   SafeQueue<std::shared_ptr<MediaProducer>> mCreatingProducers;
   SafeMap<std::string, std::shared_ptr<MediaProducer>> mProducerMap;
+  std::shared_ptr<PlainTransport> mPlainTransport;
+  std::string mAppId;
   std::string mName;
   std::string mId;
 
@@ -48,8 +50,8 @@ public:
   void destroyMediaSession();
   void createMediaProducer(std::shared_ptr<StreamInfo> info);
 
-  void sendVideoData(std::string streamKey, const char *data, const uint32_t size);
-  void sendAudioData(std::string streamKey, const char *data, const uint32_t size);
+  void sendVideoData(std::string streamKey, const uint8_t *data, const uint32_t size);
+  void sendAudioData(std::string streamKey, const uint8_t *data, const uint32_t size);
 
   void pause(std::string streamKey);
   void resume(std::string streamKey);

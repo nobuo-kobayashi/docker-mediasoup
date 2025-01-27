@@ -1,4 +1,4 @@
-import { EventEmitter } from 'events';
+import { EventEmitter, Listener } from 'events';
 
 /**
  * Websocket が接続されているステートを定義します。
@@ -12,17 +12,6 @@ export const WSEvent = {
   KEY_WS_CLOSED: 'wsclosed',
   KEY_WS_ERROR: 'wserror',
   KEY_WS_MESSAGE: 'wsmessage',
-  KEY_RTP_CAPABILITIES: 'rtpCapabilities',
-  KEY_SEND_TRANSPORT: 'sendTransport',
-  KEY_RECV_TRANSPORT: 'recvTransport',
-  KEY_PRODUCER: 'producer',
-  KEY_CONSUMER: 'consumer',
-  KEY_DATA_SEND_TRANSPORT: 'dataSendTransport',
-  KEY_DATA_RECV_TRANSPORT: 'dataRecvTransport',
-  KEY_DATA_PRODUCER: 'dataProducer',
-  KEY_DATA_CONSUMER: 'dataConsumer',
-  KEY_PRODUCER_LIST: 'producerList',
-  KEY_DATA_PRODUCER_LIST: 'dataProducerList'
 }
 
 export class WebsocketClient {
@@ -38,7 +27,7 @@ export class WebsocketClient {
     this.emitter = new EventEmitter();
   }
 
-  on(key:string, callback:any) {
+  on(key:string, callback:Listener) {
     this.emitter.on(key, callback);
   }
 

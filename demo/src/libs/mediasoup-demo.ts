@@ -1,10 +1,13 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { WSEvent } from "./websocket-client";
 import { MediasoupProducer, ProducerEvent } from "./mediasoup-producer";
 import { MediasoupConsumer, ConsumerEvent } from "./mediasoup-consumer";
 import { MediasoupDataProducer, DataProducerEvent } from "./mediasoup-dataproducer";
 import { MediasoupDataConsumer, DataConsumerEvent } from "./mediasoup-dataconsumer";
+import { MediasoupProducerParams, MediasoupConsumerParams } from "./mediasoup-types";
 import { MediasoupEventEmitter } from './mediasoup-events';
 import { MediasoupWebsocket } from "./mediasoup-websocket";
+import { CountDownLatch } from "./count-down-latch";
 
 export const DemoEvent = {
   KEY_WS_OPEN: 'ws-open',
@@ -17,13 +20,13 @@ export class MediasoupDemo extends MediasoupEventEmitter {
   private websocket?:MediasoupWebsocket;
   private rtpCapabilities?:object;
   private producer?:MediasoupProducer;
-  private consumer?:MediasoupConsumer;
   private dataProducer?:MediasoupDataProducer;
   private dataConsumer?:MediasoupDataConsumer;
-  private stream?:MediaStream;
-  private remoteVideo?:HTMLVideoElement;
-  private producerId?:string;
   private dataProducerId?:string;
+
+  private producers = new Map<string, MediasoupProducer>();
+  private consumers = new Map<string, MediasoupConsumer>();
+  private dataConsumers = new Map<string, MediasoupDataConsumer>();
 
   constructor(url:string) {
     super();
@@ -35,7 +38,7 @@ export class MediasoupDemo extends MediasoupEventEmitter {
   }
 
   // ===============================================================================
-  // WebsocketClient Callbacks
+  // MediasoupWebsocket Callbacks
   // ===============================================================================
 
   onWSOpen() : void {
@@ -59,41 +62,44 @@ export class MediasoupDemo extends MediasoupEventEmitter {
   }
 
   async requestRtpCapabilities() : Promise<void> {
-    const response = await this.websocket?.sendMessage(JSON.stringify({
+    const response = await this.websocket?.sendMessageInSequence(JSON.stringify({
       type: 'rtpCapabilities'
     }));
     this.rtpCapabilities = response.rtpCapabilities;
   }
 
   async requestGetProducerList() : Promise<any> {
-    const response = await this.websocket?.sendMessage(JSON.stringify({
+    const response = await this.websocket?.sendMessageInSequence(JSON.stringify({
       type: 'producerList'
     }));
     return response.producers;
   }
 
   async requestGetDataProducerList() : Promise<any> {
-    const response = await this.websocket?.sendMessage(JSON.stringify({
+    const response = await this.websocket?.sendMessageInSequence(JSON.stringify({
       type: 'dataProducerList'
     }));
     return response.dataProducers;
   }
 
-  async requestCreateProducer(stream:MediaStream) : Promise<void> {
+  async requestCreateProducer(params:MediasoupProducerParams) : Promise<void> {
     if (this.producer) {
       console.warn('this.producer has already been created.');
       return;
     }
 
-    if (!stream) {
+    if (!params.name) {
+      console.warn('name not set.');
+      return;
+    }
+
+    if (!params.stream) {
       console.warn('stream not set.');
       return;
     }
 
-    this.stream = stream;
-
     const response = await this.createWebRtcTransport();
-    this.createProducer(response, this.stream);
+    this.createProducer(response, params);
   }
 
   async destroyProducer() : Promise<void> {
@@ -108,42 +114,33 @@ export class MediasoupDemo extends MediasoupEventEmitter {
     this.producer = undefined;
   }
 
-  async requestCreateConsumer(producerId:string, remoteVideo:HTMLVideoElement) : Promise<void> {
-    if (this.consumer) {
-      console.warn('this.consumer has already been created.');
-      return;
-    }
-
-    if (!producerId) {
-      console.warn('producerId not set.');
-      return;
+  async requestCreateConsumer(params:MediasoupConsumerParams) : Promise<string> {
+    if (!params.producerIds) {
+      console.warn('producerIds not set.');
+      throw new Error('producerIdsnot set.');
     }
     
-    if (!remoteVideo) {
+    if (!params.remoteVideo) {
       console.warn('remoteVideo not set.');
-      return;
+      throw new Error('remoteVideo not set.');
     }
-
-    this.producerId = producerId;
-    this.remoteVideo = remoteVideo;
 
     const response = await this.createWebRtcTransport();
-    await this.createConsumer(response, this.remoteVideo);
+    const consumer = await this.createConsumer(response, params);
+    this.consumers.set(consumer.getId(), consumer);
+    return consumer.getId();
   }
 
-  async destroyConsumer() : Promise<void> {
-    if (!this.consumer) {
-      console.warn('this.consumer not initialized.');
-      return;
+  async destroyConsumer(consumerId:string) : Promise<void> {
+    const consumer = this.consumers.get(consumerId);
+    if (consumer) {
+      await this.destroyWebRtcTransport(consumer.getTransportId());
+      consumer.close();
+      this.consumers.delete(consumerId);
     }
-
-    await this.destroyWebRtcTransport(this.consumer.getTransportId());
-
-    this.consumer.close();
-    this.consumer = undefined;
   }
 
-  async requestCreateDataProducer() : Promise<void> {
+  async requestCreateDataProducer(params:MediasoupProducerParams) : Promise<void> {
     if (this.dataProducer) {
       console.warn('this.dataProducer has already been created.');
       return;
@@ -195,7 +192,7 @@ export class MediasoupDemo extends MediasoupEventEmitter {
   }
 
   private async createWebRtcTransport() {
-    return await this.websocket?.sendMessage(JSON.stringify({
+    return await this.websocket?.sendMessageInSequence(JSON.stringify({
       type: 'createWebRtcTransport'
     }));
   }
@@ -205,7 +202,7 @@ export class MediasoupDemo extends MediasoupEventEmitter {
       console.warn('transport.id not set.');
       return;
     }
-    return await this.websocket?.sendMessage(JSON.stringify({
+    return await this.websocket?.sendMessageInSequence(JSON.stringify({
       type: 'destroyWebRtcTransport',
       payload: {
         id: id
@@ -213,42 +210,61 @@ export class MediasoupDemo extends MediasoupEventEmitter {
     }));
   }
 
-  private async createProducer(sendTransport:any, stream: MediaStream) : Promise<void> {
+  private async createProducer(sendTransport:any, params:MediasoupProducerParams) : Promise<void> {
     if (!this.rtpCapabilities) {
       throw new Error('rtpCapabilities is not initialized.');
     }
+    if (!params.stream) {
+      throw new Error('stream is undefind.');
+    }
 
-    this.producer = new MediasoupProducer(this.rtpCapabilities);
+    this.producer = new MediasoupProducer(this.rtpCapabilities, params);
     this.producer.on(ProducerEvent.KEY_PRODUCER_CONNECT, async (message:any) => {
-      await this.websocket?.sendMessage(JSON.stringify(message));
+      await this.websocket?.sendMessageInSequence(JSON.stringify(message));
     });
     this.producer.on(ProducerEvent.KEY_PRODUCER_PRODUCE, async (message:any) => {
-      await this.websocket?.sendMessage(JSON.stringify(message));
+      await this.websocket?.sendMessageInSequence(JSON.stringify(message));
     });
     await this.producer.create(sendTransport);
-    await this.producer.produce(stream);
+    await this.producer.produce(params.stream);
   }
 
-  private async createConsumer(recvTransport:any, video:HTMLVideoElement) : Promise<void> {
+  private async createConsumer(recvTransport:any, params:MediasoupConsumerParams) : Promise<MediasoupConsumer> {
     if (!this.rtpCapabilities) {
       throw new Error('rtpCapabilities is not initialized.');
     }
-    if (!this.producerId) {
+    if (params.producerIds.length == 0) {
       throw new Error('producerId is not initialized.');
     }
+    if (!params.remoteVideo) {
+      throw new Error('remoteVideo is not initialized.');
+    }
 
-    this.consumer = new MediasoupConsumer(this.rtpCapabilities);
-    this.consumer.on(ConsumerEvent.KEY_CONSUMER_CONNECTED, async (message:any) => {
-      const response = await this.websocket?.sendMessage(JSON.stringify(message));
+    const countDown = new CountDownLatch(params.producerIds.length + 1);
+
+    const consumer = new MediasoupConsumer(this.rtpCapabilities, params);
+    consumer.on(ConsumerEvent.KEY_CONSUMER_CONNECTED, async (message:any) => {
+      const response = await this.websocket?.sendMessageInSequence(JSON.stringify(message));
       console.log('connect ', response);
+      countDown.countDown();
     });
-    this.consumer.on(ConsumerEvent.KEY_CONSUMER_CONSUME, async (message:any) => {
-      const response = await this.websocket?.sendMessage(JSON.stringify(message));
+    consumer.on(ConsumerEvent.KEY_CONSUMER_CONSUME, async (message:any) => {
+      const producerId = message.payload.producerId;
+      const response = await this.websocket?.sendMessageInSequence(JSON.stringify(message));
       console.log('consumer ', response);
-      await this.consumer?.consume(response);
-      this.consumer?.play(video);
+      await consumer.consume(producerId, response);
+      countDown.countDown();
     });
-    await this.consumer.create(recvTransport, this.producerId);
+
+    try {
+      await consumer.create(recvTransport, params.producerIds);
+      await countDown.wait(20 * 1000);
+      consumer.play(params.remoteVideo);
+      return consumer;
+    } catch (e) {
+      consumer.close();
+      throw e;
+    }
   }
 
   private async createDataProducer(sendTransport:any) : Promise<void> {
@@ -258,10 +274,10 @@ export class MediasoupDemo extends MediasoupEventEmitter {
 
     this.dataProducer = new MediasoupDataProducer(this.rtpCapabilities);
     this.dataProducer.on(DataProducerEvent.KEY_DATA_PRODUCER_CONNECTED, async (message:any) => {
-      await this.websocket?.sendMessage(JSON.stringify(message));
+      await this.websocket?.sendMessageInSequence(JSON.stringify(message));
     });
     this.dataProducer.on(DataProducerEvent.KEY_DATA_PRODUCER_PRODUCE, async (message:any) => {
-      await this.websocket?.sendMessage(JSON.stringify(message));
+      await this.websocket?.sendMessageInSequence(JSON.stringify(message));
     });
     await this.dataProducer.create(sendTransport);
     await this.dataProducer.dataProduce();
@@ -277,10 +293,10 @@ export class MediasoupDemo extends MediasoupEventEmitter {
 
     this.dataConsumer = new MediasoupDataConsumer(this.rtpCapabilities);
     this.dataConsumer.on(DataConsumerEvent.KEY_DATA_CONSUMER_CONNECTED, async (message:any) => {
-      await this.websocket?.sendMessage(JSON.stringify(message));
+      await this.websocket?.sendMessageInSequence(JSON.stringify(message));
     });
     this.dataConsumer.on(DataConsumerEvent.KEY_DATA_CONSUMER_CONSUME, async (message:any) => {
-      const response = await this.websocket?.sendMessage(JSON.stringify(message));
+      const response = await this.websocket?.sendMessageInSequence(JSON.stringify(message));
       await this.dataConsumer?.dataConsume(response);
     });
     this.dataConsumer.on(DataConsumerEvent.KEY_DATA_CONSUMER_MESSAGE, (message:string) => {
@@ -296,24 +312,24 @@ export class MediasoupDemo extends MediasoupEventEmitter {
   resumeProducer() {
     if (this.producer) {
       this.producer.resume();
-      this.websocket?.sendMessage(JSON.stringify({
-        type: 'resumeProducer',
-        payload: {
-          producerId: this.producerId
-        }
-      }));
+      // this.websocket?.sendMessageInSequence(JSON.stringify({
+      //   type: 'resumeProducer',
+      //   payload: {
+      //     producerId: this.producerId
+      //   }
+      // }));
     }
   }
 
   pauseProducer() {
     if (this.producer) {
       this.producer.pause();
-      this.websocket?.sendMessage(JSON.stringify({
-        type: 'pauseProducer',
-        payload: {
-          producerId: this.producerId
-        }
-      }));
+      // this.websocket?.sendMessageInSequence(JSON.stringify({
+      //   type: 'pauseProducer',
+      //   payload: {
+      //     producerId: this.producerId
+      //   }
+      // }));
     }
 
     // ブラウザで、音声をミュートにします。

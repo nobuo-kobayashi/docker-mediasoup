@@ -9,6 +9,7 @@
 
 MediasoupClient::MediasoupClient(std::string name) : mName(name)
 {
+  mAppId = "aabbcc";
 }
 
 MediasoupClient::~MediasoupClient()
@@ -66,6 +67,7 @@ void MediasoupClient::requestCreateProducer(std::string id, std::string kind, js
         {"kind", kind},
         {"rtpParameters", rtpParameters},
         {"appData", json{
+          {"id", mAppId.c_str()},
           {"name", mName.c_str()},
         }}
       }}
@@ -116,7 +118,7 @@ void MediasoupClient::createMediaProducer(std::shared_ptr<StreamInfo> info)
   createNextProducer();
 }
 
-void MediasoupClient::sendVideoData(std::string streamKey, const char *data, const uint32_t size)
+void MediasoupClient::sendVideoData(std::string streamKey, const uint8_t *data, const uint32_t size)
 {
   std::shared_ptr<MediaProducer> producer = mProducerMap.get(streamKey);
   if (producer) {
@@ -124,7 +126,7 @@ void MediasoupClient::sendVideoData(std::string streamKey, const char *data, con
   }
 }
 
-void MediasoupClient::sendAudioData(std::string streamKey, const char *data, const uint32_t size)
+void MediasoupClient::sendAudioData(std::string streamKey, const uint8_t *data, const uint32_t size)
 {
   std::shared_ptr<MediaProducer> producer = mProducerMap.get(streamKey);
   if (producer) {
@@ -202,6 +204,12 @@ void MediasoupClient::onMediasoupSendPlainTransport(json& payload)
   int port = payload["port"].get<int>();
   int rtcpPort = payload["rtcpPort"].get<int>();
 
+  mPlainTransport = std::make_shared<PlainTransport>();
+  mPlainTransport->id = id;
+  mPlainTransport->ip = ip;
+  mPlainTransport->port = port;
+  mPlainTransport->rtcpPort = rtcpPort;
+
   std::shared_ptr<MediaProducer> producer = mCreatingProducers.front();
   switch (producer->state) {
     case CreatingVideo:
@@ -219,8 +227,12 @@ void MediasoupClient::onMediasoupSendPlainTransport(json& payload)
             {"payloadType", producer->info->videoInfo.codec.payloadType},
             {"clockRate", producer->info->videoInfo.codec.clockRate},
             {"parameters", json{
+              // 1 つのフレームを複数の RTP パケットに分割して送信する
+              //「フラグメント化された NAL ユニット（FU-A）」を使用します。
               {"packetization-mode", 1},
               {"profile-level-id", "42e01f"},
+              // 送信側と受信側が異なるレベルを使用することを許可します。
+              // 例えば、送信側がレベル 4.0 を使用し、受信側がレベル 3.1 を使用することが可能です。
               {"level-asymmetry-allowed", 1}
             }}
           }

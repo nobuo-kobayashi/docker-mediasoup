@@ -1,7 +1,7 @@
 #include "AVCDecoderConfigurationRecord.h"
 #include "../../utils/Log.h"
 
-void AVCDecoderConfigurationRecordParser::parse(const char *data, uint32_t dataLen, AVCDecoderConfigurationRecord* avcConfig)
+void AVCDecoderConfigurationRecordParser::parse(const uint8_t *data, uint32_t dataLen, AVCDecoderConfigurationRecord* avcConfig)
 {
   uint32_t index = 0;
   avcConfig->configurationVersion = data[index++] & 0xFF;

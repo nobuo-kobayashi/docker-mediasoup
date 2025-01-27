@@ -136,7 +136,7 @@ bool RTMPServer::onStreamKey(RTMPClient *client, std::string streamKey)
   }
 
   if (mListener && !mListener->onStreamKey(this, streamKey)) {
-    // 指定されていないストリームキーが指定された場合
+    // 指定されていないストリームキーが指定された場合は切断を行う
     LOG_ERROR("streamKey=(%s) not found.\n", streamKey.c_str());
     return false;
   }
@@ -172,16 +172,16 @@ void RTMPServer::onReceivedAudioConfig(RTMPClient *client, AudioSpecificConfig *
   }
 }
 
-void RTMPServer::onReceivedVideoData(RTMPClient *client, const char *data, uint32_t size, uint32_t timestamp)
+void RTMPServer::onReceivedVideoData(RTMPClient *client, const uint8_t *data, uint32_t size, uint32_t timestamp)
 {
   if (mListener) {
-    mListener->onReceivedVideoData(this, client->streamKey, data, size);
+    mListener->onReceivedVideoData(this, client->streamKey, data, size, timestamp);
   }
 }
 
-void RTMPServer::onReceivedAudioData(RTMPClient *client, const char *data, uint32_t size, uint32_t timestamp)
+void RTMPServer::onReceivedAudioData(RTMPClient *client, const uint8_t *data, uint32_t size, uint32_t timestamp)
 {
   if (mListener) {
-    mListener->onReceivedAudioData(this, client->streamKey, data, size);
+    mListener->onReceivedAudioData(this, client->streamKey, data, size, timestamp);
   }
 }

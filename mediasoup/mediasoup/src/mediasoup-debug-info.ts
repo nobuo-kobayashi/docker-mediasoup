@@ -21,6 +21,11 @@ export class MediasoupDebugInfo {
         router.observer.on('newtransport', (transport:any) => {
           logger.debug(`new transport created [worker.pid:${worker.pid}, router.id:${router.id}, transport.id:${transport.id}]`);
 
+          // transport.enableTraceEvent([ "bwe" ]);
+          // transport.on('trace', (trace:any) => {
+          //   logger.debug(`@@@ transport[${transport.id}]: `, trace);
+          // });
+
           transport.observer.on('close', () => {
             logger.debug(`transport closed [transport.id:${transport.id}]`);
           });

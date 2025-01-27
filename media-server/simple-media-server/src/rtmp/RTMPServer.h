@@ -26,8 +26,8 @@ public:
   virtual void onClosed(RTMPServer *server, std::string streamKey) {}
   virtual void onReceivedVideoConfig(RTMPServer *server, std::string streamKey, AVCDecoderConfigurationRecord *config) {}
   virtual void onReceivedAudioConfig(RTMPServer *server, std::string streamKey, AudioSpecificConfig *config) {}
-  virtual void onReceivedVideoData(RTMPServer *server, std::string streamKey, const char *data, const uint32_t size) {}
-  virtual void onReceivedAudioData(RTMPServer *server, std::string streamKey, const char *data, const uint32_t size) {}
+  virtual void onReceivedVideoData(RTMPServer *server, std::string streamKey, const uint8_t *data, const uint32_t size, uint32_t timestamp) {}
+  virtual void onReceivedAudioData(RTMPServer *server, std::string streamKey, const uint8_t *data, const uint32_t size, uint32_t timestamp) {}
 };
 
 class RTMPServer : public BaseThread, public RTMPClientListener {
@@ -64,6 +64,6 @@ public:
   virtual void onClosed(RTMPClient *client) override;
   virtual void onReceivedVideoConfig(RTMPClient *client, AVCDecoderConfigurationRecord *config) override;
   virtual void onReceivedAudioConfig(RTMPClient *client, AudioSpecificConfig *config) override;
-  virtual void onReceivedVideoData(RTMPClient *client, const char *data, uint32_t size, uint32_t timestamp) override;
-  virtual void onReceivedAudioData(RTMPClient *client, const char *data, uint32_t size, uint32_t timestamp) override;
+  virtual void onReceivedVideoData(RTMPClient *client, const uint8_t *data, uint32_t size, uint32_t timestamp) override;
+  virtual void onReceivedAudioData(RTMPClient *client, const uint8_t *data, uint32_t size, uint32_t timestamp) override;
 };

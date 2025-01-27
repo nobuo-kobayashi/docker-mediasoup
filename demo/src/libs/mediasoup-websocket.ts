@@ -1,25 +1,25 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { v4 as uuidv4 } from 'uuid';
 import { WebsocketClient, WSEvent } from "./websocket-client";
 import { AsyncQueue, AsyncTask } from "./async-queue";
 
-type CallbackFunction = (type:string, payload:any, error:any) => void;
+type WebsocketCallbackFunction = (type:string, payload:any, error:any) => void;
 
 class WebsocketTask {
   uuid:string;
   request:string;
-  callback:CallbackFunction;
+  callback:WebsocketCallbackFunction;
   timerId:number|undefined;
 
-  constructor(uuid:string, request:string, callback:CallbackFunction) {
+  constructor(uuid:string, request:string, callback:WebsocketCallbackFunction, timeout:number = 10 * 1000) {
     this.uuid = uuid;
     this.request = request;
     this.callback = callback;
-    this.timerId = setTimeout(() => {
-      callback(uuid, undefined, {
-        code: 0,
-        message: 'timeout'
-      });
-    }, 15 * 1000);
+    if (timeout > 0) {
+      this.timerId = setTimeout(() => {
+        callback(uuid, undefined, new MediasoupError('0', 'timeout'));
+      }, timeout);
+    }
   }
 
   clearTimer() {
@@ -30,16 +30,29 @@ class WebsocketTask {
   }
 }
 
+export class MediasoupError extends Error {
+  code:string;
+  constructor(code:string, message:string) {
+    super(message);
+    this.code = code;
+  }
+}
+
 export class MediasoupWebsocket extends WebsocketClient {
   private requestMap:Map<string, WebsocketTask> = new Map();
   private queue = new AsyncQueue();
+  private timeout = 10 * 1000;
 
   constructor(url:string) {
     super(url);
     this.on(WSEvent.KEY_WS_MESSAGE, this.onMessage.bind(this));
   }
 
-  async sendMessage(message:string) : Promise<any> {
+  setTimeout(timeout:number) {
+    this.timeout = timeout;
+  }
+
+  async sendMessageInSequence(message:string|object) : Promise<any> {
     return new Promise<void>((resolve, reject) => {
       this.queue.enqueue(this.createTask(message, (_:string, payload:any, error:any) => {
         if (error) {
@@ -71,15 +84,20 @@ export class MediasoupWebsocket extends WebsocketClient {
         const error = json.error;
         task.callback(uuid, payload, error);
       } else {
-        console.warn(`Not found a task. uuid=${uuid}`);
+        console.error(`Not found a task. uuid=${uuid}`);
       }
     } else {
       console.error(`uuid is undefined.`);
     }
   }
 
-  private createTask(message:string, callback:CallbackFunction) : AsyncTask {
+  private createTask(message:string|object, callback:WebsocketCallbackFunction) : AsyncTask {
     return () => new Promise<void>((resolve, reject) => {
+      if (!this.isConnected()) {
+        callback('', undefined, new MediasoupError('0', 'websocket not connected.'));
+        reject();
+      }
+
       try {
         // リクエスト
         // {
@@ -104,7 +122,7 @@ export class MediasoupWebsocket extends WebsocketClient {
         // リクエストに対するレスポンスは、uuid で一致することを確認します。
         // サーバー側でエラーが発生した場合は、error の要素にエラーコードとメッセージが格納されます。
 
-        const json = JSON.parse(message);
+        const json = typeof(message) !== 'string' ? message : JSON.parse(message);
         json.uuid = uuidv4();
         console.log('send message: ' + json.uuid);
         const task = new WebsocketTask(json.uuid, JSON.stringify(json), (uuid:string, payload:any, error:any) => {
@@ -112,10 +130,11 @@ export class MediasoupWebsocket extends WebsocketClient {
           task.clearTimer();
           callback(uuid, payload, error);
           resolve();
-        });
+        }, this.timeout);
         this.requestMap.set(json.uuid, task);
         this.send(JSON.stringify(json));
       } catch (error) {
+        callback('', undefined, error);
         reject(error);
       }
     });

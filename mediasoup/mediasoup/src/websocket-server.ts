@@ -88,7 +88,7 @@ export class WebsocketServer {
 
   //
 
-  onConnect(ws:any, request:express.Request) : void {
+  private onConnect(ws:any, request:express.Request) : void {
     const remoteIPAddress = this.getRemoteIPAddress(request);
     const clientId = 'client_id_' + (this.count++);
     const client = new WebsocketClient(this, clientId, ws, remoteIPAddress);

@@ -19,12 +19,12 @@ export class MediasoupServer {
     this.websocketClients = new Map();
   }
 
-  onConnected(client:WebsocketClient) : void {
+  private onConnected(client:WebsocketClient) : void {
     const mediasoupClient = new MediasoupClient(this.manager, client);
     this.websocketClients.set(client.getId(), mediasoupClient);
   }
 
-  onDisconnected(client:WebsocketClient) : void {
+  private onDisconnected(client:WebsocketClient) : void {
     try {
       this.websocketClients.delete(client.getId());
     } catch (e) {

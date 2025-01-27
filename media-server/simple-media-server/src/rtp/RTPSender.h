@@ -16,7 +16,7 @@ using namespace jrtplib;
 
 #define RTP_HEADER_LEN 12
 
-#define MAXLEN (RTP_DEFAULTPACKETSIZE - 100 - RTP_HEADER_LEN)
+#define MAXLEN (RTP_DEFAULTPACKETSIZE - 200 - RTP_HEADER_LEN)
 
 class RTPSender {
 protected:
@@ -47,5 +47,5 @@ public:
 
   virtual void open();
   virtual void close();
-  virtual void send(const char *data, const uint32_t dataLen) = 0;
+  virtual void send(const uint8_t *data, const uint32_t dataLen) = 0;
 };

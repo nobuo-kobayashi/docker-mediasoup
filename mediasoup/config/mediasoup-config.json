@@ -53,16 +53,15 @@
   ],
   "webRtcTransportOptions": {
     "listenIps": [
-      { "ip": "127.0.0.1" },
-      { "ip": "0.0.0.0", "announcedIp": "192.168.2.30" }
+      { "ip": "0.0.0.0", "announcedIp": "{PublicIP}" }
     ],
     "enableUdp": true,
     "enableTcp": false,
     "preferUdp": true,
     "enableSctp": true,
-    "initialAvailableOutgoingBitrate": 10000000
+    "initialAvailableOutgoingBitrate": 1000000
   },
   "plainTransportOptions": {
-    "listenIp": { "ip": "0.0.0.0", "announcedIp": "192.168.2.30" }
+    "listenIp": { "ip": "0.0.0.0", "announcedIp": "{PublicIP}" }
   }
 }

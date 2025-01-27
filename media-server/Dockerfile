@@ -46,7 +46,7 @@ RUN mkdir -p /tmp/build \
 && mkdir -p build \
 && cd build \
 && cmake -DCMAKE_BUILD_TYPE=Release .. \
-&& make \
+&& make -j4 \
 && make install
 
 RUN mkdir -p /tmp/build \
@@ -54,15 +54,15 @@ RUN mkdir -p /tmp/build \
 && git clone --depth 1 https://github.com/mstorsjo/fdk-aac \
 && cd fdk-aac \
 && bash autogen.sh \
-&& ./configure \
-&& make \
+&& ./configure CFLAGS="-O3 -march=native -flto -s" \
+&& make -j4 \
 && make install
 
 COPY simple-media-server/ ${WORK_FOLDER}/simple-media-server
 
 RUN mkdir -p ${WORK_FOLDER}/simple-media-server/build \
 && cd ${WORK_FOLDER}/simple-media-server/build \
-&& cmake .. \
+&& cmake -DCMAKE_BUILD_TYPE=Release .. \
 && make
 
 # JRTPLIB を使用するのに環境変数に LOGNAME が必要になるので定義しておきます。
